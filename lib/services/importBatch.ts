@@ -34,55 +34,72 @@ export async function importBatch(
   const { rows, petaKolomTerdeteksi } = await parseRawNominatif(fileBuffer);
   const [master, kamus] = await Promise.all([loadMasterCache(), loadKamusMap()]);
 
-  const batch = await prisma.uploadBatch.create({
-    data: {
-      bulan,
-      tahun,
-      namaFileAsli,
-      status: "Diproses",
-      jumlahBarisTotal: rows.length,
-      diunggahOlehId,
-      petaKolomTerdeteksi,
-    },
-  });
-
-  let jumlahBerhasil = 0;
-  let jumlahPerluReview = 0;
-
-  for (const row of rows) {
-    const result = classifyRow(row, master, kamus);
-
-    if (result.ok) {
-      await prisma.pegawai.upsert({
-        where: { nip: row.nip },
-        create: { nip: row.nip },
-        update: {},
-      });
-      await prisma.nominatifBulanan.upsert({
-        where: { pegawaiNip_bulan_tahun: { pegawaiNip: row.nip, bulan, tahun } },
-        create: { pegawaiNip: row.nip, bulan, tahun, uploadBatchId: batch.id, ...result.data },
-        update: { uploadBatchId: batch.id, ...result.data },
-      });
-      jumlahBerhasil++;
-    } else {
-      await prisma.barisBermasalah.create({
+  // Seluruh proses dibungkus 1 transaksi - ribuan write terpisah tanpa transaksi sangat lambat
+  // di SQLite (tiap query auto-commit sendiri) dan berisiko batch "setengah jadi" kalau proses
+  // gagal di tengah jalan.
+  const batchId = await prisma.$transaction(
+    async (tx) => {
+      const batch = await tx.uploadBatch.create({
         data: {
-          uploadBatchId: batch.id,
-          nip: row.nip,
-          dataMentah: toDataMentah(row),
-          alasanUtama: pilihAlasanUtama(result.issues),
-          detailAlasan: result.issues.map((i) => i.detail).join(" | "),
+          bulan,
+          tahun,
+          namaFileAsli,
+          status: "Diproses",
+          jumlahBarisTotal: rows.length,
+          diunggahOlehId,
+          petaKolomTerdeteksi,
         },
       });
-      jumlahPerluReview++;
-    }
-  }
 
-  const status = jumlahPerluReview === 0 ? "Selesai" : "MenungguReview";
-  await prisma.uploadBatch.update({
-    where: { id: batch.id },
-    data: { jumlahBerhasil, jumlahPerluReview, status },
-  });
+      let jumlahBerhasil = 0;
+      let jumlahPerluReview = 0;
 
-  return { uploadBatchId: batch.id, jumlahBarisTotal: rows.length, jumlahBerhasil, jumlahPerluReview };
+      for (const row of rows) {
+        const result = classifyRow(row, master, kamus);
+
+        if (result.ok) {
+          await tx.pegawai.upsert({
+            where: { nip: row.nip },
+            create: { nip: row.nip },
+            update: {},
+          });
+          await tx.nominatifBulanan.upsert({
+            where: { pegawaiNip_bulan_tahun: { pegawaiNip: row.nip, bulan, tahun } },
+            create: { pegawaiNip: row.nip, bulan, tahun, uploadBatchId: batch.id, ...result.data },
+            update: { uploadBatchId: batch.id, ...result.data },
+          });
+          jumlahBerhasil++;
+        } else {
+          await tx.barisBermasalah.create({
+            data: {
+              uploadBatchId: batch.id,
+              nip: row.nip,
+              dataMentah: toDataMentah(row),
+              alasanUtama: pilihAlasanUtama(result.issues),
+              detailAlasan: result.issues.map((i) => i.detail).join(" | "),
+            },
+          });
+          jumlahPerluReview++;
+        }
+      }
+
+      const status = jumlahPerluReview === 0 ? "Selesai" : "MenungguReview";
+      await tx.uploadBatch.update({
+        where: { id: batch.id },
+        data: { jumlahBerhasil, jumlahPerluReview, status },
+      });
+
+      return batch.id;
+    },
+    { timeout: 5 * 60 * 1000 }
+  );
+
+  const final = await prisma.uploadBatch.findUniqueOrThrow({ where: { id: batchId } });
+
+  return {
+    uploadBatchId: final.id,
+    jumlahBarisTotal: final.jumlahBarisTotal,
+    jumlahBerhasil: final.jumlahBerhasil,
+    jumlahPerluReview: final.jumlahPerluReview,
+  };
 }

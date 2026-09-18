@@ -7,6 +7,7 @@ import {
   extractGolonganCode,
   kunciKamus,
   matchJabatanFungsionalTendik,
+  matchStatusAgainstKategori,
   normalize,
   prefixOrExactMatch,
 } from "./matching";
@@ -87,7 +88,7 @@ export function resolveKelompok(
     return { kelompok: diingat as KelompokPegawai };
   }
 
-  if (prefixOrExactMatch(master.kategoriAkademisiLuar, (k) => k.nama, row.statusPegawaiRaw)) {
+  if (matchStatusAgainstKategori(master.kategoriAkademisiLuar, (k) => k.nama, row.statusPegawaiRaw)) {
     return { kelompok: "Akademisi Luar UM" };
   }
   if (normalize(row.statusPegawaiRaw) === normalize("Akademisi Luar UM")) {
@@ -118,7 +119,7 @@ export function resolveKategoriAkademisiLuar(
   const diingat = dariKamus(kamus, "KategoriAkademisiLuar", kunciKategoriAkademisiLuar(row));
   if (diingat && master.kategoriAkademisiLuar.some((k) => k.kode === diingat)) return { kode: diingat };
 
-  const byStatus = prefixOrExactMatch(master.kategoriAkademisiLuar, (k) => k.nama, row.statusPegawaiRaw);
+  const byStatus = matchStatusAgainstKategori(master.kategoriAkademisiLuar, (k) => k.nama, row.statusPegawaiRaw);
   if (byStatus) return { kode: byStatus.kode };
   const byJenis = prefixOrExactMatch(master.kategoriAkademisiLuar, (k) => k.nama, row.jenisPegawaiRaw);
   if (byJenis) return { kode: byJenis.kode };

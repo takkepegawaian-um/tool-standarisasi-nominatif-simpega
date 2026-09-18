@@ -34,6 +34,29 @@ export function prefixOrExactMatch<T>(
   });
 }
 
+/**
+ * Cocokkan raw value SEBAGAI KATA-KATA AWAL PERSIS dari nama master (mis. "Praktisi" ->
+ * "Praktisi Mengajar", "AP" -> "AP - Adjunct Professor") - batas kata (spasi), bukan substring
+ * bebas, supaya tetap deterministik. HANYA aman dipakai untuk membandingkan terhadap "Status
+ * Pegawai" mentah (nilai status yang legit seperti PNS/PTNA/dst tidak pernah kebetulan jadi
+ * awalan nama kategori Akademisi Luar manapun) - JANGAN dipakai untuk "Jenis Pegawai" mentah,
+ * karena "Dosen" akan salah kena cocok ke kategori "Dosen Akademisi" dan merusak klasifikasi
+ * ribuan baris Dosen biasa. Untuk Jenis Pegawai tetap pakai `prefixOrExactMatch` yang lebih
+ * ketat (hanya pola "KODE - Nama").
+ */
+export function matchStatusAgainstKategori<T>(
+  list: T[],
+  getName: (t: T) => string,
+  raw: string
+): T | undefined {
+  const n = normalize(raw);
+  if (!n) return undefined;
+  return list.find((item) => {
+    const name = normalize(getName(item));
+    return name === n || name.startsWith(`${n} `);
+  });
+}
+
 const GOLONGAN_PATTERN = /\b(I{1,3}|IV)\/[a-eA-E]\b/;
 
 /** Ekstrak kode golongan (mis. "II/d") dari teks deskriptif seperti "Pengatur Tingkat I, II/d". */

@@ -50,16 +50,18 @@ export async function generateNominatifExport(uploadBatchId: string): Promise<Bu
   const sheet = workbook.getWorksheet(SHEET_NAME);
   if (!sheet) throw new Error(`Sheet "${SHEET_NAME}" tidak ditemukan di template ekspor.`);
 
-  // Buang baris contoh/catatan bawaan template (baris 2 dst), sisakan header baris 1.
-  if (sheet.rowCount > 1) {
-    sheet.spliceRows(2, sheet.rowCount - 1);
-  }
+  // Baris contoh/catatan bawaan template (baris 2 dst) DITIMPA langsung, bukan dihapus dulu -
+  // `spliceRows` exceljs punya bug off-by-one saat count-nya pas mencapai baris terakhir sheet
+  // (rentang yang mau dihapus sama persis dengan sisa baris template disini) sehingga
+  // tidak menghapus apa pun. Menimpa nilai per-baris langsung menghindari bug itu sekaligus
+  // lebih sederhana.
+  const originalLastRow = sheet.rowCount;
 
-  for (const row of rows) {
+  rows.forEach((row, idx) => {
     const slot1 = row.jabatanTambahan[0];
     const slot2 = row.jabatanTambahan[1];
 
-    sheet.addRow([
+    sheet.getRow(idx + 2).values = [
       row.pegawaiNip,
       row.nama,
       row.jenisKelamin,
@@ -79,7 +81,13 @@ export async function generateNominatifExport(uploadBatchId: string): Promise<Bu
       slot2?.jabatanTambahanRole.namaRole ?? "",
       slot2?.unitAsal?.nama ?? slot2?.programStudi?.nama ?? "",
       slot2?.statusPengangkatan ?? "",
-    ]);
+    ];
+  });
+
+  // Kalau data lebih pendek dari template asli (jarang di produksi, tapi bisa terjadi saat
+  // testing), bersihkan sisa baris contoh/catatan yang belum ketimpa.
+  for (let r = rows.length + 2; r <= originalLastRow; r++) {
+    sheet.getRow(r).values = [];
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
