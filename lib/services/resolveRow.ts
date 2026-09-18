@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/db";
-import type { ResolvedNominatif } from "@/lib/domain/classify";
+import type { JabatanTambahanSlot, ResolvedNominatif } from "@/lib/domain/classify";
 import {
+  encodeJabatanTambahan,
   kunciGolongan,
   kunciJabatan,
+  kunciJabatanTambahan,
   kunciKategoriAkademisiLuar,
   kunciKlasifikasi,
   kunciStatusKepegawaian,
@@ -17,6 +19,7 @@ export type IngatFlags = {
   golongan?: boolean;
   jabatan?: boolean;
   unitKerja?: boolean;
+  jabatanTambahan?: boolean;
 };
 
 export type ResolveRowInput = {
@@ -56,7 +59,9 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
       select: { bulan: true, tahun: true },
     });
 
-    await tx.nominatifBulanan.upsert({
+    const { jabatanTambahan, ...nominatifData } = input.data;
+
+    const nominatif = await tx.nominatifBulanan.upsert({
       where: {
         pegawaiNip_bulan_tahun: {
           pegawaiNip: baris.nip,
@@ -69,10 +74,19 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
         bulan: nominatifBulanan.bulan,
         tahun: nominatifBulanan.tahun,
         uploadBatchId: baris.uploadBatchId,
-        ...input.data,
+        ...nominatifData,
       },
-      update: { uploadBatchId: baris.uploadBatchId, ...input.data },
+      update: { uploadBatchId: baris.uploadBatchId, ...nominatifData },
     });
+
+    await tx.nominatifBulananJabatanTambahan.deleteMany({
+      where: { nominatifBulananId: nominatif.id },
+    });
+    if (jabatanTambahan) {
+      await tx.nominatifBulananJabatanTambahan.create({
+        data: { nominatifBulananId: nominatif.id, ...jabatanTambahan },
+      });
+    }
 
     await tx.barisBermasalah.update({
       where: { id: baris.id },
@@ -179,6 +193,21 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
           dibuatOlehId: input.diselesaikanOlehId,
         },
         update: { nilaiResolusi: input.data.unitAsalKode },
+      });
+    }
+    if (input.ingat.jabatanTambahan && jabatanTambahan) {
+      const nilai = encodeJabatanTambahan(jabatanTambahan);
+      await tx.kamusKoreksi.upsert({
+        where: {
+          jenisField_kunciMentah: { jenisField: "JabatanTambahan", kunciMentah: kunciJabatanTambahan(rawRow) },
+        },
+        create: {
+          jenisField: "JabatanTambahan",
+          kunciMentah: kunciJabatanTambahan(rawRow),
+          nilaiResolusi: nilai,
+          dibuatOlehId: input.diselesaikanOlehId,
+        },
+        update: { nilaiResolusi: nilai },
       });
     }
 

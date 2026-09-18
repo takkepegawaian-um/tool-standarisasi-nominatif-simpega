@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 
 import { auth } from "@/lib/auth";
-import type { ResolvedNominatif } from "@/lib/domain/classify";
+import type { JabatanTambahanSlot, ResolvedNominatif } from "@/lib/domain/classify";
 import { resolveRow } from "@/lib/services/resolveRow";
 
 export type ResolveState = { error?: string };
@@ -66,6 +66,23 @@ export async function resolveBarisBermasalah(
     return { error: "Jabatan fungsional/fungsi wajib dipilih." };
   }
 
+  let jabatanTambahan: JabatanTambahanSlot | null = null;
+  if (kelompok !== "Akademisi Luar UM" && formData.get("adaJabatanTambahan") === "on") {
+    const roleKode = String(formData.get("jabatanTambahanRoleKode") ?? "").trim();
+    const targetKode = String(formData.get("jabatanTambahanTargetKode") ?? "").trim();
+    const statusPengangkatan = String(formData.get("statusPengangkatan") ?? "").trim();
+    if (!roleKode || !targetKode || !statusPengangkatan) {
+      return { error: "Jabatan Tambahan dicentang tapi role/unit-prodi/status pengangkatan belum lengkap dipilih." };
+    }
+    const [targetTipe, targetId] = targetKode.split(":");
+    jabatanTambahan = {
+      jabatanTambahanRoleKode: roleKode,
+      unitAsalKode: targetTipe === "UNIT" ? targetId : null,
+      programStudiKode: targetTipe === "PRODI" ? targetId : null,
+      statusPengangkatan,
+    };
+  }
+
   const data: ResolvedNominatif = {
     nama,
     jenisKelamin,
@@ -81,6 +98,7 @@ export async function resolveBarisBermasalah(
     jabatanFungsiUmumKode,
     kategoriAkademisiLuarKode: kelompok === "Akademisi Luar UM" ? kategoriAkademisiLuarKode : null,
     unitAsalKode,
+    jabatanTambahan,
   };
 
   const { prisma } = await import("@/lib/db");
@@ -101,6 +119,7 @@ export async function resolveBarisBermasalah(
       golongan: formData.get("ingatGolongan") === "on",
       jabatan: formData.get("ingatJabatan") === "on",
       unitKerja: formData.get("ingatUnit") === "on",
+      jabatanTambahan: formData.get("ingatJabatanTambahan") === "on",
     },
     diselesaikanOlehId: session.user.id,
   });

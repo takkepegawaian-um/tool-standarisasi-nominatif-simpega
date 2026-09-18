@@ -58,16 +58,32 @@ export async function importBatch(
         const result = classifyRow(row, master, kamus);
 
         if (result.ok) {
+          const { jabatanTambahan, ...nominatifData } = result.data;
+
           await tx.pegawai.upsert({
             where: { nip: row.nip },
             create: { nip: row.nip },
             update: {},
           });
-          await tx.nominatifBulanan.upsert({
+          const nominatif = await tx.nominatifBulanan.upsert({
             where: { pegawaiNip_bulan_tahun: { pegawaiNip: row.nip, bulan, tahun } },
-            create: { pegawaiNip: row.nip, bulan, tahun, uploadBatchId: batch.id, ...result.data },
-            update: { uploadBatchId: batch.id, ...result.data },
+            create: { pegawaiNip: row.nip, bulan, tahun, uploadBatchId: batch.id, ...nominatifData },
+            update: { uploadBatchId: batch.id, ...nominatifData },
           });
+
+          // Hapus dulu slot jabatan tambahan lama (kalau ini re-upload bulan yang sama), lalu
+          // buat ulang - satu-satunya slot yang bisa diisi otomatis dari sumber saat ini (slot
+          // ke-2 selalu kosong dari alur upload, hanya bisa diisi lewat resolusi manual kalau
+          // suatu saat ada kasus rangkap 2 jabatan).
+          await tx.nominatifBulananJabatanTambahan.deleteMany({
+            where: { nominatifBulananId: nominatif.id },
+          });
+          if (jabatanTambahan) {
+            await tx.nominatifBulananJabatanTambahan.create({
+              data: { nominatifBulananId: nominatif.id, ...jabatanTambahan },
+            });
+          }
+
           jumlahBerhasil++;
         } else {
           await tx.barisBermasalah.create({

@@ -18,6 +18,7 @@ export const ALASAN_BARIS_BERMASALAH = [
   "StatusTidakDikenali",
   "GolonganTidakDikenali",
   "JabatanTidakDikenali",
+  "JabatanTambahanTidakDikenali",
   "UnitKerjaTidakDikenali",
   "PendidikanTidakDikenali",
   "Lainnya",
@@ -29,6 +30,7 @@ export const ALASAN_LABEL: Record<AlasanBarisBermasalah, string> = {
   StatusTidakDikenali: "Status kepegawaian tidak dikenali",
   GolonganTidakDikenali: "Golongan tidak dikenali",
   JabatanTidakDikenali: "Jabatan tidak dikenali",
+  JabatanTambahanTidakDikenali: "Jabatan tambahan tidak dikenali",
   UnitKerjaTidakDikenali: "Unit kerja tidak dikenali",
   PendidikanTidakDikenali: "Pendidikan tidak dikenali",
   Lainnya: "Lainnya",
@@ -44,6 +46,7 @@ export const JENIS_FIELD_KAMUS = [
   "KategoriAkademisiLuar",
   "UnitKerja",
   "Pendidikan",
+  "JabatanTambahan",
 ] as const;
 export type JenisFieldKamus = (typeof JENIS_FIELD_KAMUS)[number];
 

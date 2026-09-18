@@ -2,14 +2,17 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
+  pisahJabatanTambahanRaw,
   resolveGolongan,
   resolveJabatan,
+  resolveJabatanTambahan,
   resolveKategoriAkademisiLuar,
   resolveKelompok,
   resolveStatusKepegawaian,
   resolveUnitKerja,
 } from "@/lib/domain/classify";
 import { loadKamusMap, loadMasterCache } from "@/lib/domain/masterCache";
+import { exactMatch } from "@/lib/domain/matching";
 import { prisma } from "@/lib/db";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
@@ -60,6 +63,34 @@ export default async function ResolveRowPage({
   const unit = resolveUnitKerja(raw, master, kamus);
   const prefillUnit = "kode" in unit ? unit.kode : null;
 
+  let prefillAdaJabatanTambahan = false;
+  let prefillJabatanTambahanRoleKode: string | null = null;
+  let prefillJabatanTambahanTargetKode: string | null = null;
+  let prefillStatusPengangkatan: string | null = null;
+
+  if (prefillKelompok && prefillKelompok !== "Akademisi Luar UM" && raw.jabatanTambahanRaw.trim()) {
+    prefillAdaJabatanTambahan = true;
+    const jt = resolveJabatanTambahan(raw, master, kamus, prefillKelompok);
+    if ("slot" in jt && jt.slot) {
+      prefillJabatanTambahanRoleKode = jt.slot.jabatanTambahanRoleKode;
+      prefillJabatanTambahanTargetKode = jt.slot.unitAsalKode
+        ? `UNIT:${jt.slot.unitAsalKode}`
+        : jt.slot.programStudiKode
+          ? `PRODI:${jt.slot.programStudiKode}`
+          : null;
+      prefillStatusPengangkatan = jt.slot.statusPengangkatan;
+    } else {
+      // Kamus belum tahu Status Pengangkatan-nya, tapi role & unit/prodi mungkin tetap bisa
+      // di-prefill dari pencocokan langsung supaya admin tidak perlu cari manual dari nol.
+      const { roleRaw, unit: u, prodi, status } = pisahJabatanTambahanRaw(raw.jabatanTambahanRaw, master);
+      const role = exactMatch(master.jabatanTambahanRole, (r) => r.namaRole, roleRaw);
+      if (role) prefillJabatanTambahanRoleKode = role.kode;
+      if (u) prefillJabatanTambahanTargetKode = `UNIT:${u.kode}`;
+      else if (prodi) prefillJabatanTambahanTargetKode = `PRODI:${prodi.kode}`;
+      if (status) prefillStatusPengangkatan = status;
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -87,6 +118,8 @@ export default async function ResolveRowPage({
           <dd className="col-span-2">{raw.golonganPangkatRaw || "-"}</dd>
           <dt className="font-medium">Jabatan Fungsional</dt>
           <dd className="col-span-2">{raw.jabatanFungsionalRaw || "-"}</dd>
+          <dt className="font-medium">Jabatan Tambahan</dt>
+          <dd className="col-span-2">{raw.jabatanTambahanRaw || "-"}</dd>
           <dt className="font-medium">Subag/Unit Kerja</dt>
           <dd className="col-span-2">{raw.subagUnitKerjaRaw || "-"}</dd>
           <dt className="font-medium">Unit/Unit Kerja Induk</dt>
@@ -109,6 +142,10 @@ export default async function ResolveRowPage({
           kategoriAkademisiLuarKode: prefillKategori,
           jabatanPilihan: prefillJabatan,
           unitAsalKode: prefillUnit,
+          adaJabatanTambahan: prefillAdaJabatanTambahan,
+          jabatanTambahanRoleKode: prefillJabatanTambahanRoleKode,
+          jabatanTambahanTargetKode: prefillJabatanTambahanTargetKode,
+          statusPengangkatan: prefillStatusPengangkatan,
         }}
         master={{
           statusKepegawaian: master.statusKepegawaian,
@@ -118,6 +155,8 @@ export default async function ResolveRowPage({
           jabatanFungsiUmumPelaksana: master.jabatanFungsiUmumPelaksana,
           kategoriAkademisiLuar: master.kategoriAkademisiLuar,
           unitAsal: master.unitAsal,
+          jabatanTambahanRole: master.jabatanTambahanRole,
+          programStudi: master.programStudi,
         }}
       />
     </div>

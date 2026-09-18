@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 
+import { STATUS_PENGANGKATAN } from "@/lib/constants";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
 import { resolveBarisBermasalah, type ResolveState } from "./actions";
@@ -15,6 +16,8 @@ type Master = {
   jabatanFungsiUmumPelaksana: { kode: string; nama: string }[];
   kategoriAkademisiLuar: { kode: string; nama: string }[];
   unitAsal: { kode: string; nama: string }[];
+  jabatanTambahanRole: { kode: string; namaRole: string; berlakuUntuk: string }[];
+  programStudi: { kode: string; nama: string }[];
 };
 
 type Prefill = {
@@ -24,6 +27,10 @@ type Prefill = {
   kategoriAkademisiLuarKode: string | null;
   jabatanPilihan: string | null;
   unitAsalKode: string | null;
+  adaJabatanTambahan: boolean;
+  jabatanTambahanRoleKode: string | null;
+  jabatanTambahanTargetKode: string | null;
+  statusPengangkatan: string | null;
 };
 
 function toDateInputValue(iso: string | null): string {
@@ -60,6 +67,7 @@ export function ResolveForm({
   const boundAction = resolveBarisBermasalah.bind(null, batchId, barisId);
   const [state, formAction] = useActionState<ResolveState, FormData>(boundAction, {});
   const [kelompok, setKelompok] = useState(prefill.kelompok ?? "Tendik");
+  const [adaJabatanTambahan, setAdaJabatanTambahan] = useState(prefill.adaJabatanTambahan);
 
   return (
     <form action={formAction} className="space-y-6 rounded-lg border border-slate-200 bg-white p-6">
@@ -253,6 +261,91 @@ export function ResolveForm({
             </label>
           </div>
         </>
+      )}
+
+      {kelompok !== "Akademisi Luar UM" && (
+        <div>
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              name="adaJabatanTambahan"
+              checked={adaJabatanTambahan}
+              onChange={(e) => setAdaJabatanTambahan(e.target.checked)}
+            />
+            Punya Jabatan Tambahan
+          </label>
+
+          {adaJabatanTambahan && (
+            <div className="mt-3 space-y-3 rounded-md border border-slate-200 p-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Jabatan Tambahan</label>
+                <select
+                  name="jabatanTambahanRoleKode"
+                  defaultValue={prefill.jabatanTambahanRoleKode ?? ""}
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Pilih jabatan tambahan...</option>
+                  {master.jabatanTambahanRole
+                    .filter((r) => r.berlakuUntuk === "Keduanya" || r.berlakuUntuk === kelompok)
+                    .map((r) => (
+                      <option key={r.kode} value={r.kode}>
+                        {r.namaRole}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">
+                  Unit/Prodi Jabatan Tambahan
+                </label>
+                <select
+                  name="jabatanTambahanTargetKode"
+                  defaultValue={prefill.jabatanTambahanTargetKode ?? ""}
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Pilih unit/prodi...</option>
+                  <optgroup label="Unit Asal">
+                    {master.unitAsal.map((u) => (
+                      <option key={u.kode} value={`UNIT:${u.kode}`}>
+                        {u.nama}
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="Program Studi">
+                    {master.programStudi.map((p) => (
+                      <option key={p.kode} value={`PRODI:${p.kode}`}>
+                        {p.nama}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Status Pengangkatan</label>
+                <select
+                  name="statusPengangkatan"
+                  defaultValue={prefill.statusPengangkatan ?? ""}
+                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                >
+                  <option value="">Pilih status pengangkatan...</option>
+                  {STATUS_PENGANGKATAN.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  Tidak ada sinyalnya di data sumber - selalu perlu dipilih manual.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-slate-500">
+                <input type="checkbox" name="ingatJabatanTambahan" />
+                Ingat resolusi ini (role + unit/prodi + status) untuk teks Jabatan Tambahan mentah
+                yang sama bulan berikutnya
+              </label>
+            </div>
+          )}
+        </div>
       )}
 
       <div>

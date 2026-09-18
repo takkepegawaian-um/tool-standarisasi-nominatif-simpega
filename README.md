@@ -45,14 +45,16 @@ Login default: `admin@simpega.um.ac.id` / `kdsone` (ganti setelah setup awal).
   menolak seluruh file dengan pesan jelas kalau struktur berubah drastis, bukan menebak.
 - **Tidak ada fuzzy-matching otomatis** di manapun (lihat `lib/domain/matching.ts` dan
   `lib/domain/classify.ts`) — hanya exact/prefix match ke master data + kamus koreksi.
+- **Jabatan Tambahan** (role + unit/prodi + status pengangkatan, slot 1) diekstrak dari 1 sel
+  mentah yang menggabungkan nama role & unit tanpa pemisah konsisten (`lib/domain/classify.ts`,
+  `pisahJabatanTambahanRaw` — mencoba tiap nama role master sebagai kandidat awalan, tervalidasi
+  cuma kalau sisanya PERSIS cocok nama Unit Asal/Program Studi). Status Pengangkatan
+  (Definitif/Plt/Pjs) tidak pernah ada sinyalnya di sumber KECUALI teks diawali "Plt."/"Pjs."
+  eksplisit — selain itu selalu perlu resolusi manual sekali lalu diingat lewat kamus koreksi.
+  Slot ke-2 tidak pernah diisi otomatis (sumber cuma punya 1 kolom jabatan tambahan).
 
 ## Keterbatasan v1 / follow-up yang belum dikerjakan
 
-- **Jabatan Tambahan (slot 1 & 2) belum diisi otomatis dari file mentah.** Skema (`prisma/schema.prisma`,
-  model `NominatifBulananJabatanTambahan`) dan kolom di file ekspor sudah siap, tapi
-  `importBatch`/`resolveRow` belum mem-parsing & mencocokkan kolom "Jabatan Tambahan" mentah
-  (raw-nya menggabungkan nama role + unit dalam 1 sel, dan sumber tidak punya info Status
-  Pengangkatan sama sekali) — perlu dirancang alur resolusi manual terpisah.
 - **Database produksi (Postgres) belum disiapkan** — jalan di SQLite untuk dev. Ganti
   `provider` di `prisma/schema.prisma` dari `sqlite` ke `postgresql` dan `DATABASE_URL` di
   `.env`, lalu `prisma migrate deploy`, sebelum deploy (rekomendasi: Neon, native ke Vercel).
