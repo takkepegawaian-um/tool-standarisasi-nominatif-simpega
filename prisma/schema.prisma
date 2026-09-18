@@ -1,0 +1,284 @@
+// Skema ini SENGAJA menghindari fitur spesifik-provider (mis. Prisma `enum`, yang tidak
+// didukung SQLite) supaya bisa pindah dari SQLite (dev) ke Postgres (produksi) tanpa
+// perubahan skema. Nilai "enum-like" (status, alasan, dsb) direpresentasikan sebagai String
+// dengan union type TypeScript di lib/constants.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =========================================================================
+// Master data — read-only via UI, di-seed dari database Laravel SIMPEGA UM
+// (sistem_kepegawaian_um) yang sudah jadi source of truth produksi.
+// =========================================================================
+
+model JenisPegawai {
+  kode       String  @id // DSN / TDK / AKL
+  nama       String
+  keterangan String?
+
+  nominatif NominatifBulanan[]
+
+  @@map("mst_jenis_pegawai")
+}
+
+model StatusKepegawaian {
+  kode     String @id
+  nama     String
+  kategori String // ASN / Non-ASN
+
+  nominatif NominatifBulanan[]
+
+  @@map("mst_status_kepegawaian")
+}
+
+model Golongan {
+  kode String @id // "I/a" .. "IV/e"
+
+  nominatif NominatifBulanan[]
+
+  @@map("mst_golongan")
+}
+
+model JabatanFungsionalDosen {
+  kode          String @id
+  nama          String
+  urutanJenjang Int
+
+  nominatif NominatifBulanan[]
+
+  @@map("mst_jabatan_fungsional_dosen")
+}
+
+model JabatanFungsionalTendik {
+  kode         String @id
+  jabatanPokok String
+  jenjang      String
+
+  nominatif NominatifBulanan[]
+
+  @@map("mst_jabatan_fungsional_tendik")
+}
+
+model JabatanFungsiUmumPelaksana {
+  kode String @id
+  nama String
+
+  nominatif NominatifBulanan[]
+
+  @@map("mst_jabatan_fungsi_umum_pelaksana")
+}
+
+model JabatanTambahanRole {
+  kode         String @id
+  namaRole     String
+  berlakuUntuk String // Dosen / Tendik / Keduanya
+
+  jabatanTambahan NominatifBulananJabatanTambahan[]
+
+  @@map("mst_jabatan_tambahan_role")
+}
+
+model UnitInduk {
+  kode String @id
+  nama String
+
+  unitAsal UnitAsal[]
+
+  @@map("mst_unit_induk")
+}
+
+model UnitAsal {
+  kode          String @id
+  nama          String
+  unitIndukKode String
+
+  unitInduk UnitInduk @relation(fields: [unitIndukKode], references: [kode])
+
+  programStudi        ProgramStudi[]
+  nominatif           NominatifBulanan[]
+  jabatanTambahanUnit NominatifBulananJabatanTambahan[] @relation("JabatanTambahanUnit")
+
+  @@map("mst_unit_asal")
+}
+
+model ProgramStudi {
+  kode           String @id
+  nama           String
+  jenjang        String
+  unitAsalKode   String
+  statusValidasi String // Draft / Tervalidasi
+
+  unitAsal UnitAsal @relation(fields: [unitAsalKode], references: [kode])
+
+  jabatanTambahanProdi NominatifBulananJabatanTambahan[] @relation("JabatanTambahanProdi")
+
+  @@map("mst_program_studi")
+}
+
+model KategoriAkademisiLuar {
+  kode                String  @id
+  nama                String
+  masukRekapKehadiran Boolean
+
+  nominatif NominatifBulanan[]
+
+  @@map("mst_kategori_akademisi_luar")
+}
+
+// =========================================================================
+// Domain inti — mirror struktur nominatif_bulanan Laravel supaya kompatibel
+// dengan template ekspor & harapan sistem SIMPEGA di sisi lain.
+// =========================================================================
+
+model Pegawai {
+  nip        String   @id
+  dibuatPada DateTime @default(now())
+
+  nominatif NominatifBulanan[]
+
+  @@map("pegawai")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  nama         String
+  dibuatPada   DateTime @default(now())
+
+  uploadBatch      UploadBatch[]
+  barisDiselesaikan BarisBermasalah[]
+  kamusKoreksi     KamusKoreksi[]
+  auditLog         AuditLog[]
+
+  @@map("user")
+}
+
+model UploadBatch {
+  id                  String   @id @default(cuid())
+  bulan               Int
+  tahun               Int
+  namaFileAsli        String
+  status              String   @default("Diproses") // Diproses/MenungguReview/Selesai/Dibatalkan
+  jumlahBarisTotal    Int      @default(0)
+  jumlahBerhasil      Int      @default(0)
+  jumlahPerluReview   Int      @default(0)
+  petaKolomTerdeteksi Json?
+  fileExportPath      String?
+  diunggahOlehId      String
+  diunggahPada        DateTime @default(now())
+
+  diunggahOleh    User              @relation(fields: [diunggahOlehId], references: [id])
+  nominatif       NominatifBulanan[]
+  barisBermasalah BarisBermasalah[]
+
+  @@map("upload_batch")
+}
+
+model BarisBermasalah {
+  id                 String    @id @default(cuid())
+  uploadBatchId      String
+  nip                String
+  dataMentah         Json
+  alasanUtama        String
+  detailAlasan       String
+  status             String    @default("Menunggu") // Menunggu/Terselesaikan/Dikecualikan
+  resolvedFields     Json?
+  diselesaikanOlehId String?
+  diselesaikanPada   DateTime?
+  dibuatPada         DateTime  @default(now())
+
+  uploadBatch    UploadBatch @relation(fields: [uploadBatchId], references: [id], onDelete: Cascade)
+  diselesaikanOleh User?     @relation(fields: [diselesaikanOlehId], references: [id])
+
+  @@map("baris_bermasalah")
+}
+
+model KamusKoreksi {
+  id            String   @id @default(cuid())
+  jenisField    String
+  kunciMentah   String
+  nilaiResolusi String
+  catatan       String?
+  dibuatOlehId  String
+  dibuatPada    DateTime @default(now())
+
+  dibuatOleh User @relation(fields: [dibuatOlehId], references: [id])
+
+  @@unique([jenisField, kunciMentah])
+  @@map("kamus_koreksi")
+}
+
+model AuditLog {
+  id              String   @id @default(cuid())
+  aksi            String
+  entitas         String
+  entitasId       String
+  detail          Json?
+  dilakukanOlehId String
+  dilakukanPada   DateTime @default(now())
+
+  dilakukanOleh User @relation(fields: [dilakukanOlehId], references: [id])
+
+  @@map("audit_log")
+}
+
+model NominatifBulanan {
+  id                          String   @id @default(cuid())
+  pegawaiNip                  String
+  bulan                       Int
+  tahun                       Int
+  nama                        String
+  jenisKelamin                String // L / P
+  tanggalLahir                DateTime
+  pendidikanTerakhir          String?
+  agama                       String?
+  jenisPegawaiKode            String
+  statusKepegawaianKode       String
+  golonganKode                String?
+  jabatanFungsionalDosenKode  String?
+  jabatanFungsionalTendikKode String?
+  jabatanFungsiUmumKode       String?
+  kategoriAkademisiLuarKode   String?
+  unitAsalKode                String
+  tanggalMulaiKerja           DateTime
+  uploadBatchId               String
+  dibuatPada                  DateTime @default(now())
+
+  pegawai                 Pegawai                     @relation(fields: [pegawaiNip], references: [nip])
+  jenisPegawai             JenisPegawai                @relation(fields: [jenisPegawaiKode], references: [kode])
+  statusKepegawaian        StatusKepegawaian           @relation(fields: [statusKepegawaianKode], references: [kode])
+  golongan                 Golongan?                   @relation(fields: [golonganKode], references: [kode])
+  jabatanFungsionalDosen   JabatanFungsionalDosen?     @relation(fields: [jabatanFungsionalDosenKode], references: [kode])
+  jabatanFungsionalTendik  JabatanFungsionalTendik?    @relation(fields: [jabatanFungsionalTendikKode], references: [kode])
+  jabatanFungsiUmum        JabatanFungsiUmumPelaksana? @relation(fields: [jabatanFungsiUmumKode], references: [kode])
+  kategoriAkademisiLuar    KategoriAkademisiLuar?      @relation(fields: [kategoriAkademisiLuarKode], references: [kode])
+  unitAsal                 UnitAsal                    @relation(fields: [unitAsalKode], references: [kode])
+  uploadBatch              UploadBatch                 @relation(fields: [uploadBatchId], references: [id])
+  jabatanTambahan          NominatifBulananJabatanTambahan[]
+
+  @@unique([pegawaiNip, bulan, tahun])
+  @@map("nominatif_bulanan")
+}
+
+model NominatifBulananJabatanTambahan {
+  id                      String  @id @default(cuid())
+  nominatifBulananId      String
+  jabatanTambahanRoleKode String
+  unitAsalKode            String?
+  programStudiKode        String?
+  statusPengangkatan      String // Definitif / Plt / Pjs
+
+  nominatifBulanan    NominatifBulanan    @relation(fields: [nominatifBulananId], references: [id], onDelete: Cascade)
+  jabatanTambahanRole JabatanTambahanRole @relation(fields: [jabatanTambahanRoleKode], references: [kode])
+  unitAsal            UnitAsal?           @relation("JabatanTambahanUnit", fields: [unitAsalKode], references: [kode])
+  programStudi        ProgramStudi?       @relation("JabatanTambahanProdi", fields: [programStudiKode], references: [kode])
+
+  @@map("nominatif_bulanan_jabatan_tambahan")
+}

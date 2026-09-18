@@ -1,0 +1,27 @@
+[
+  {
+    "kode": "DSN-00",
+    "nama": "Tenaga Pengajar",
+    "urutanJenjang": 0
+  },
+  {
+    "kode": "DSN-01",
+    "nama": "Asisten Ahli",
+    "urutanJenjang": 1
+  },
+  {
+    "kode": "DSN-02",
+    "nama": "Lektor",
+    "urutanJenjang": 2
+  },
+  {
+    "kode": "DSN-03",
+    "nama": "Lektor Kepala",
+    "urutanJenjang": 3
+  },
+  {
+    "kode": "DSN-04",
+    "nama": "Guru Besar (Profesor)",
+    "urutanJenjang": 4
+  }
+]
