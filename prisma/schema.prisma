@@ -1,14 +1,13 @@
-// Skema ini SENGAJA menghindari fitur spesifik-provider (mis. Prisma `enum`, yang tidak
-// didukung SQLite) supaya bisa pindah dari SQLite (dev) ke Postgres (produksi) tanpa
-// perubahan skema. Nilai "enum-like" (status, alasan, dsb) direpresentasikan sebagai String
-// dengan union type TypeScript di lib/constants.ts.
+// Nilai "enum-like" (status, alasan, dsb) sengaja direpresentasikan sebagai String biasa
+// (bukan `enum` Prisma) dengan union type TypeScript di lib/constants.ts, bukan karena
+// keterbatasan provider - cukup supaya validasi nilai jadi satu tempat yang mudah diaudit.
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -170,7 +169,6 @@ model UploadBatch {
   jumlahBerhasil      Int      @default(0)
   jumlahPerluReview   Int      @default(0)
   petaKolomTerdeteksi Json?
-  fileExportPath      String?
   diunggahOlehId      String
   diunggahPada        DateTime @default(now())
 

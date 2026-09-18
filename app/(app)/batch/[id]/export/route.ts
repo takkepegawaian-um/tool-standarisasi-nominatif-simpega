@@ -1,32 +1,18 @@
-import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/db";
 import { generateNominatifExport } from "@/lib/excel/exportNominatif";
 import { namaBulan } from "@/lib/constants";
 
-const ARSIP_DIR = path.join(process.cwd(), "storage", "arsip");
-
+// Digenerate ulang dari DB tiap request (bukan di-cache ke disk) - filesystem serverless Vercel
+// read-only/ephemeral di luar /tmp, dan generate-nya sendiri murah (baca DB + isi template).
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const batch = await prisma.uploadBatch.findUnique({ where: { id } });
   if (!batch) return NextResponse.json({ error: "Batch tidak ditemukan." }, { status: 404 });
 
-  let buffer: Buffer;
-  if (batch.fileExportPath && existsSync(batch.fileExportPath)) {
-    buffer = await readFile(batch.fileExportPath);
-  } else {
-    buffer = await generateNominatifExport(id);
-    await mkdir(ARSIP_DIR, { recursive: true });
-    const filePath = path.join(ARSIP_DIR, `${id}.xlsx`);
-    await writeFile(filePath, buffer);
-    await prisma.uploadBatch.update({ where: { id }, data: { fileExportPath: filePath } });
-  }
-
+  const buffer = await generateNominatifExport(id);
   const filename = `Nominatif_Bulanan_${namaBulan(batch.bulan)}${batch.tahun}.xlsx`;
 
   return new NextResponse(new Uint8Array(buffer), {

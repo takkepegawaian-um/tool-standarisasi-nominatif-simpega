@@ -8,20 +8,39 @@ skema master data yang jadi rujukan di sini.
 
 ## Stack
 
-Next.js 15 (App Router, TypeScript) · Prisma + SQLite (dev) — ganti ke Postgres untuk produksi ·
-Tailwind CSS · NextAuth (Credentials, 1 akun admin) · exceljs.
+Next.js 15 (App Router, TypeScript) · Prisma + Postgres · Tailwind CSS ·
+NextAuth (Credentials, 1 akun admin) · exceljs.
 
-## Setup
+## Setup (dev lokal)
+
+Butuh 1 database Postgres (mis. branch/database terpisah dari Postgres produksi - lihat bagian
+Deploy di bawah untuk cara membuatnya lewat Vercel).
 
 ```bash
 npm install
-cp .env.example .env      # isi AUTH_SECRET, lihat komentar di file
+cp .env.example .env      # isi DATABASE_URL & AUTH_SECRET, lihat komentar di file
 npx prisma migrate dev
 npx prisma db seed        # seed master data (dari prisma/seed-data/*.json) + akun admin
 npm run dev
 ```
 
 Login default: `admin@simpega.um.ac.id` / `kdsone` (ganti setelah setup awal).
+
+## Deploy (Vercel + Postgres bawaan Vercel)
+
+1. Di dashboard Vercel: **Add New... > Project**, import repo GitHub ini.
+2. Di project yang baru dibuat: tab **Storage > Create Database > Postgres** (Neon di
+   baliknya) - ini otomatis menambahkan environment variable koneksi ke project (biasanya
+   `DATABASE_URL` atau `POSTGRES_URL`/`POSTGRES_PRISMA_URL`; kalau namanya bukan persis
+   `DATABASE_URL`, tambahkan env var baru bernama `DATABASE_URL` berisi nilai yang sama).
+3. Tab **Settings > Environment Variables**: tambahkan `AUTH_SECRET` (generate baru, JANGAN
+   pakai yang sama dengan `.env` lokal - lihat komentar di `.env.example`).
+4. Deploy. Build script (`package.json`) otomatis menjalankan `prisma migrate deploy` +
+   `prisma db seed` sebelum `next build`, jadi skema & master data + akun admin ter-setup
+   otomatis di database baru pada deploy pertama.
+5. Login pakai `admin@simpega.um.ac.id` / `kdsone`, **segera ganti password** setelah login
+   pertama (belum ada UI ganti password di v1 - lakukan lewat `prisma studio` atau query
+   manual: hash baru dengan bcrypt, update kolom `passwordHash` di tabel `user`).
 
 ## Alur
 
@@ -55,11 +74,13 @@ Login default: `admin@simpega.um.ac.id` / `kdsone` (ganti setelah setup awal).
 
 ## Keterbatasan v1 / follow-up yang belum dikerjakan
 
-- **Database produksi (Postgres) belum disiapkan** — jalan di SQLite untuk dev. Ganti
-  `provider` di `prisma/schema.prisma` dari `sqlite` ke `postgresql` dan `DATABASE_URL` di
-  `.env`, lalu `prisma migrate deploy`, sebelum deploy (rekomendasi: Neon, native ke Vercel).
-- **Proses upload berjalan sinkron** dalam 1 request (~1-3 menit untuk ~2.400 baris di SQLite
-  lokal) — perlu dites lagi timeout-nya di lingkungan produksi (mis. batas durasi function
-  Vercel) sebelum deploy; kalau perlu, pindahkan ke background job.
+- **Proses upload berjalan sinkron** dalam 1 request (~1-3 menit untuk ~2.400 baris) -
+  `app/(app)/layout.tsx` set `maxDuration = 300` supaya cocok untuk Vercel Pro (atau Hobby
+  dengan Fluid Compute), tapi **Vercel Hobby plan biasa hard-cap di 60 detik terlepas dari
+  config ini** - kalau upload timeout di Hobby, satu-satunya jalan adalah pindahkan proses
+  import ke background job (queue/worker terpisah), bukan sekadar naikkan angka config.
+- **Belum ada UI ganti password** - password admin awal (`kdsone`) diganti manual lewat
+  `prisma studio` atau query langsung (hash baru dengan bcrypt, update kolom `passwordHash` di
+  tabel `user`). Prioritaskan ini segera setelah deploy pertama.
 - Backfill Januari–September 2026 belum dijalankan — dilakukan manual oleh admin lewat `/upload`
   satu per satu (`scripts/test-import.ts` bisa dipakai lewat CLI sebagai alternatif kalau perlu).

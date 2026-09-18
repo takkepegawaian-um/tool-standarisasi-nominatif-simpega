@@ -3,6 +3,12 @@ import { redirect } from "next/navigation";
 
 import { auth, signOut } from "@/lib/auth";
 
+// Upload memproses ~2.400 baris secara sinkron dalam 1 request (bisa >60 detik) - default
+// Vercel Hobby cuma 60 detik & tidak bisa diperpanjang lewat config ini, Pro bisa sampai
+// 300an detik (lebih lagi dengan Fluid Compute). Kalau upload masih timeout di Hobby, satu
+// baris ini tidak cukup - proses upload perlu dipindah ke background job.
+export const maxDuration = 300;
+
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard" },
   { href: "/upload", label: "Upload" },
