@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f9fafb;
+  --foreground: #111827;
 }
 
 @theme inline {
@@ -10,14 +10,21 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Token desain diselaraskan dengan SIMPEGA UM (lihat PROMPT_Claude_Code_Restyle_UI_Nominatif.md) */
+  --color-sidebar: #101a2b;
+  --color-sidebar-lighter: #1a2436;
+  --color-sidebar-active: #22314d;
+  --color-sidebar-muted: #8a94a8;
+  --color-accent-gold: #c9a226;
+  --color-accent-green: #175c30;
+  --color-page: #f9fafb;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* SENGAJA tidak ada @media (prefers-color-scheme: dark) - desainnya tema tetap (sidebar navy +
+   konten terang), bukan adaptif ke preferensi OS. Sebelumnya ini bikin body jadi hampir hitam
+   di OS bertema gelap sementara sebagian teks tetap pakai warna gelap eksplisit -> nyaris tidak
+   terbaca. */
 
 body {
   background: var(--background);

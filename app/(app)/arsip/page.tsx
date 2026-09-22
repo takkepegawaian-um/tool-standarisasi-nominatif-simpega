@@ -41,7 +41,7 @@ export default async function ArsipPage() {
                   <td className="px-4 py-3 text-right">
                     <a
                       href={`/batch/${b.id}/export`}
-                      className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+                      className="rounded-md bg-sidebar px-3 py-1.5 text-xs font-medium text-white hover:bg-sidebar-lighter"
                     >
                       Unduh .xlsx
                     </a>
