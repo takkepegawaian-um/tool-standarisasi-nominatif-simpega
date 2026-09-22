@@ -1,29 +1,57 @@
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
+import { upload } from "@vercel/blob/client";
+import { useRef, useState } from "react";
 
 import { NAMA_BULAN } from "@/lib/constants";
 
-import { uploadNominatifBulanan, type UploadState } from "./actions";
+import { processUploadedNominatif } from "./actions";
 
 const now = new Date();
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className="w-full rounded-md bg-sidebar px-4 py-2 text-sm font-medium text-white hover:bg-sidebar-lighter disabled:opacity-50"
-    >
-      {pending ? "Memproses..." : "Upload & Proses"}
-    </button>
-  );
-}
-
 export default function UploadPage() {
-  const [state, formAction] = useActionState<UploadState, FormData>(uploadNominatifBulanan, {});
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [status, setStatus] = useState<"idle" | "mengunggah" | "memproses">("idle");
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const pending = status !== "idle";
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(undefined);
+
+    const formData = new FormData(event.currentTarget);
+    const bulan = Number(formData.get("bulan"));
+    const tahun = Number(formData.get("tahun"));
+    const file = formData.get("file");
+
+    if (!(file instanceof File) || file.size === 0) {
+      setError("File belum dipilih.");
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      setError("File harus berformat .xlsx.");
+      return;
+    }
+
+    try {
+      setStatus("mengunggah");
+      const blob = await upload(file.name, file, {
+        access: "public",
+        handleUploadUrl: "/api/upload-token",
+      });
+
+      setStatus("memproses");
+      const result = await processUploadedNominatif(bulan, tahun, blob.url, file.name);
+      if (result?.error) {
+        setError(result.error);
+        setStatus("idle");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal mengunggah file.");
+      setStatus("idle");
+    }
+  }
 
   return (
     <div className="mx-auto max-w-lg space-y-6">
@@ -37,7 +65,11 @@ export default function UploadPage() {
         </p>
       </div>
 
-      <form action={formAction} className="space-y-4 rounded-lg border border-slate-200 bg-white p-6">
+      <form
+        ref={formRef}
+        onSubmit={handleSubmit}
+        className="space-y-4 rounded-lg border border-slate-200 bg-white p-6"
+      >
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label htmlFor="bulan" className="block text-sm font-medium text-slate-700">
@@ -84,11 +116,19 @@ export default function UploadPage() {
           />
         </div>
 
-        {state.error && (
-          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{state.error}</p>
-        )}
+        {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
-        <SubmitButton />
+        <button
+          type="submit"
+          disabled={pending}
+          className="w-full rounded-md bg-sidebar px-4 py-2 text-sm font-medium text-white hover:bg-sidebar-lighter disabled:opacity-50"
+        >
+          {status === "mengunggah"
+            ? "Mengunggah file..."
+            : status === "memproses"
+              ? "Memproses..."
+              : "Upload & Proses"}
+        </button>
       </form>
     </div>
   );
