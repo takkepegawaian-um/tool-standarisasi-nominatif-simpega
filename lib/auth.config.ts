@@ -7,6 +7,9 @@ import type { NextAuthConfig } from "next-auth";
  * lib/auth.ts, yang cuma dipakai dari Route Handler (Node.js runtime).
  */
 export const authConfig: NextAuthConfig = {
+  // Eksplisit, bukan mengandalkan auto-pickup Auth.js dari process.env.AUTH_SECRET - terbukti
+  // auto-pickup itu tidak jalan di deployment produksi (error asli: "MissingSecret").
+  secret: process.env.AUTH_SECRET,
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   trustHost: true,
