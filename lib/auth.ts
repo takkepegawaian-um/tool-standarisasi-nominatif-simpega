@@ -7,6 +7,10 @@ import { prisma } from "@/lib/db";
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
+  // Tanpa ini, Auth.js kadang menolak host dari domain per-deployment Vercel
+  // (mis. *-<hash>-<team>.vercel.app), bukan cuma alias stabilnya, dan gagal
+  // dengan pesan generik "server configuration" sebelum sempat panggil authorize().
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
