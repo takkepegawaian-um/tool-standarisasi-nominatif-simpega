@@ -1,5 +1,8 @@
+import { randomUUID } from "node:crypto";
+
 import { prisma } from "@/lib/db";
 import { classifyRow, pilihAlasanUtama } from "@/lib/domain/classify";
+import type { ResolvedNominatif } from "@/lib/domain/classify";
 import { loadKamusMap, loadMasterCache } from "@/lib/domain/masterCache";
 import { parseRawNominatif } from "@/lib/excel/parseRawNominatif";
 import type { RawNominatifRow } from "@/lib/excel/types";
@@ -9,6 +12,20 @@ export type ImportBatchResult = {
   jumlahBarisTotal: number;
   jumlahBerhasil: number;
   jumlahPerluReview: number;
+};
+
+type NominatifRow = Omit<ResolvedNominatif, "jabatanTambahan"> & {
+  id: string;
+  pegawaiNip: string;
+};
+type JabatanTambahanRow = NonNullable<ResolvedNominatif["jabatanTambahan"]> & {
+  nominatifBulananId: string;
+};
+type BarisBermasalahRow = {
+  nip: string;
+  dataMentah: ReturnType<typeof toDataMentah>;
+  alasanUtama: string;
+  detailAlasan: string;
 };
 
 /**
@@ -34,9 +51,38 @@ export async function importBatch(
   const { rows, petaKolomTerdeteksi } = await parseRawNominatif(fileBuffer);
   const [master, kamus] = await Promise.all([loadMasterCache(), loadKamusMap()]);
 
-  // Seluruh proses dibungkus 1 transaksi - ribuan write terpisah tanpa transaksi sangat lambat
-  // di SQLite (tiap query auto-commit sendiri) dan berisiko batch "setengah jadi" kalau proses
-  // gagal di tengah jalan.
+  // Klasifikasi semua baris dulu di memori (tidak ada query DB sama sekali di sini) - hasilnya
+  // baru ditulis ke DB lewat beberapa query BULK saja, terlepas dari jumlah baris. Sebelumnya
+  // tiap baris di-upsert satu-satu (~2-3 round-trip/baris, ribuan round-trip utk 1 file) -
+  // di produksi (function & DB beda region/latensi lebih tinggi) ini gampang lewat batas durasi
+  // function Vercel meski sudah dibungkus 1 transaksi.
+  const nominatifRows: NominatifRow[] = [];
+  const jabatanTambahanRows: JabatanTambahanRow[] = [];
+  const barisBermasalahRows: BarisBermasalahRow[] = [];
+
+  for (const row of rows) {
+    const result = classifyRow(row, master, kamus);
+    if (result.ok) {
+      const { jabatanTambahan, ...nominatifData } = result.data;
+      const id = randomUUID();
+      nominatifRows.push({ id, pegawaiNip: row.nip, ...nominatifData });
+      if (jabatanTambahan) {
+        jabatanTambahanRows.push({ nominatifBulananId: id, ...jabatanTambahan });
+      }
+    } else {
+      barisBermasalahRows.push({
+        nip: row.nip,
+        dataMentah: toDataMentah(row),
+        alasanUtama: pilihAlasanUtama(result.issues),
+        detailAlasan: result.issues.map((i) => i.detail).join(" | "),
+      });
+    }
+  }
+
+  const jumlahBerhasil = nominatifRows.length;
+  const jumlahPerluReview = barisBermasalahRows.length;
+  const status = jumlahPerluReview === 0 ? "Selesai" : "MenungguReview";
+
   const batchId = await prisma.$transaction(
     async (tx) => {
       const batch = await tx.uploadBatch.create({
@@ -44,78 +90,51 @@ export async function importBatch(
           bulan,
           tahun,
           namaFileAsli,
-          status: "Diproses",
+          status,
           jumlahBarisTotal: rows.length,
+          jumlahBerhasil,
+          jumlahPerluReview,
           diunggahOlehId,
           petaKolomTerdeteksi,
         },
       });
 
-      let jumlahBerhasil = 0;
-      let jumlahPerluReview = 0;
+      // Upload bulanan mencerminkan SELURUH pegawai aktif bulan itu (aturan bisnis) - kalau ini
+      // upload ulang utk bulan/tahun yang sama, snapshot lama utk bulan itu diganti total oleh
+      // yang baru (cascade otomatis hapus jabatan tambahan anaknya).
+      await tx.nominatifBulanan.deleteMany({ where: { bulan, tahun } });
 
-      for (const row of rows) {
-        const result = classifyRow(row, master, kamus);
+      if (nominatifRows.length > 0) {
+        const uniqueNips = [...new Set(nominatifRows.map((r) => r.pegawaiNip))];
+        await tx.pegawai.createMany({
+          data: uniqueNips.map((nip) => ({ nip })),
+          skipDuplicates: true,
+        });
 
-        if (result.ok) {
-          const { jabatanTambahan, ...nominatifData } = result.data;
+        await tx.nominatifBulanan.createMany({
+          data: nominatifRows.map((r) => ({ ...r, bulan, tahun, uploadBatchId: batch.id })),
+        });
 
-          await tx.pegawai.upsert({
-            where: { nip: row.nip },
-            create: { nip: row.nip },
-            update: {},
-          });
-          const nominatif = await tx.nominatifBulanan.upsert({
-            where: { pegawaiNip_bulan_tahun: { pegawaiNip: row.nip, bulan, tahun } },
-            create: { pegawaiNip: row.nip, bulan, tahun, uploadBatchId: batch.id, ...nominatifData },
-            update: { uploadBatchId: batch.id, ...nominatifData },
-          });
-
-          // Hapus dulu slot jabatan tambahan lama (kalau ini re-upload bulan yang sama), lalu
-          // buat ulang - satu-satunya slot yang bisa diisi otomatis dari sumber saat ini (slot
-          // ke-2 selalu kosong dari alur upload, hanya bisa diisi lewat resolusi manual kalau
-          // suatu saat ada kasus rangkap 2 jabatan).
-          await tx.nominatifBulananJabatanTambahan.deleteMany({
-            where: { nominatifBulananId: nominatif.id },
-          });
-          if (jabatanTambahan) {
-            await tx.nominatifBulananJabatanTambahan.create({
-              data: { nominatifBulananId: nominatif.id, ...jabatanTambahan },
-            });
-          }
-
-          jumlahBerhasil++;
-        } else {
-          await tx.barisBermasalah.create({
-            data: {
-              uploadBatchId: batch.id,
-              nip: row.nip,
-              dataMentah: toDataMentah(row),
-              alasanUtama: pilihAlasanUtama(result.issues),
-              detailAlasan: result.issues.map((i) => i.detail).join(" | "),
-            },
-          });
-          jumlahPerluReview++;
+        if (jabatanTambahanRows.length > 0) {
+          await tx.nominatifBulananJabatanTambahan.createMany({ data: jabatanTambahanRows });
         }
       }
 
-      const status = jumlahPerluReview === 0 ? "Selesai" : "MenungguReview";
-      await tx.uploadBatch.update({
-        where: { id: batch.id },
-        data: { jumlahBerhasil, jumlahPerluReview, status },
-      });
+      if (barisBermasalahRows.length > 0) {
+        await tx.barisBermasalah.createMany({
+          data: barisBermasalahRows.map((r) => ({ ...r, uploadBatchId: batch.id })),
+        });
+      }
 
       return batch.id;
     },
     { timeout: 5 * 60 * 1000 }
   );
 
-  const final = await prisma.uploadBatch.findUniqueOrThrow({ where: { id: batchId } });
-
   return {
-    uploadBatchId: final.id,
-    jumlahBarisTotal: final.jumlahBarisTotal,
-    jumlahBerhasil: final.jumlahBerhasil,
-    jumlahPerluReview: final.jumlahPerluReview,
+    uploadBatchId: batchId,
+    jumlahBarisTotal: rows.length,
+    jumlahBerhasil,
+    jumlahPerluReview,
   };
 }
