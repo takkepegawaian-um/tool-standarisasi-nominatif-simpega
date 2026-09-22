@@ -30,11 +30,12 @@ Login default: `admin@simpega.um.ac.id` / `kdsone` (ganti setelah setup awal).
 
 1. Di dashboard Vercel: **Add New... > Project**, import repo GitHub ini.
 2. Di project yang baru dibuat: tab **Storage > Create Database > Postgres** (Neon di
-   baliknya) - ini otomatis menambahkan environment variable koneksi ke project (biasanya
-   `DATABASE_URL` atau `POSTGRES_URL`/`POSTGRES_PRISMA_URL`; kalau namanya bukan persis
-   `DATABASE_URL`, tambahkan env var baru bernama `DATABASE_URL` berisi nilai yang sama).
-3. Tab **Settings > Environment Variables**: tambahkan `AUTH_SECRET` (generate baru, JANGAN
-   pakai yang sama dengan `.env` lokal - lihat komentar di `.env.example`).
+   baliknya) - integrasi ini otomatis menambahkan beberapa environment variable, termasuk
+   `DATABASE_URL` (pooled, dipakai runtime) dan `DATABASE_URL_UNPOOLED` (dipakai Prisma migrate
+   lewat `directUrl` di `prisma/schema.prisma`) - keduanya harus ada persis dengan nama itu.
+3. Tab **Settings > Environments > Production** (atau **Environment Variables** di versi UI
+   lama): tambahkan `AUTH_SECRET` (generate baru, JANGAN pakai yang sama dengan `.env` lokal -
+   lihat komentar di `.env.example`).
 4. Deploy. Build script (`package.json`) otomatis menjalankan `prisma migrate deploy` +
    `prisma db seed` sebelum `next build`, jadi skema & master data + akun admin ter-setup
    otomatis di database baru pada deploy pertama.

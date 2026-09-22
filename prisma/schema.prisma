@@ -7,8 +7,11 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Koneksi tanpa pgbouncer khusus untuk migrate - migration engine Prisma pakai advisory
+  // lock & prepared statement yang tidak selalu cocok dengan pooler transaksi Neon.
+  directUrl = env("DATABASE_URL_UNPOOLED")
 }
 
 // =========================================================================
