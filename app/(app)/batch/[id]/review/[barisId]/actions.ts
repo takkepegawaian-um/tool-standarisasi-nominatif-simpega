@@ -48,7 +48,11 @@ export async function resolveBarisBermasalah(
   if (!nama) return { error: "Nama wajib diisi." };
   if (!tanggalLahir) return { error: "Tanggal lahir tidak valid." };
   if (!tanggalMulaiKerja) return { error: "Tanggal mulai kerja (TMT) tidak valid." };
-  if (!statusKepegawaianKode) return { error: "Status kepegawaian wajib dipilih." };
+  // Akademisi Luar UM tidak punya field ini di form (statusnya otomatis "PTT", lihat bawah) -
+  // jadi wajib-diisi cuma berlaku utk Dosen/Tendik yang memang menampilkan dropdown-nya.
+  if (kelompok !== "Akademisi Luar UM" && !statusKepegawaianKode) {
+    return { error: "Status kepegawaian wajib dipilih." };
+  }
   if (!unitAsalKode) return { error: "Unit kerja wajib dipilih." };
   if (kelompok === "Akademisi Luar UM" && !kategoriAkademisiLuarKode) {
     return { error: "Kategori Akademisi Luar wajib dipilih untuk kelompok Akademisi Luar UM." };

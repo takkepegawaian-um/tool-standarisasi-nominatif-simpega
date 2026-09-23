@@ -10,6 +10,7 @@ import {
   matchStatusAgainstKategori,
   normalize,
   prefixOrExactMatch,
+  prefixWordMatch,
 } from "./matching";
 
 export type Issue = { alasan: AlasanBarisBermasalah; detail: string };
@@ -242,7 +243,11 @@ export function resolveJabatan(
     const diingat = dariKamus(kamus, "JabatanFungsionalDosen", kunci);
     const dariMaster =
       (diingat && master.jabatanFungsionalDosen.find((j) => j.kode === diingat)) ||
-      exactMatch(master.jabatanFungsionalDosen, (j) => j.nama, row.jabatanFungsionalRaw);
+      exactMatch(master.jabatanFungsionalDosen, (j) => j.nama, row.jabatanFungsionalRaw) ||
+      // Master pakai label lengkap "Guru Besar (Profesor)" tapi sumber data biasa cuma tulis
+      // "Guru Besar" - fallback ini HANYA jalan kalau exactMatch di atas gagal, jadi raw yang
+      // persis "Lektor" tetap match ke "Lektor" duluan, tidak pernah nyasar ke "Lektor Kepala".
+      prefixWordMatch(master.jabatanFungsionalDosen, (j) => j.nama, row.jabatanFungsionalRaw);
     if (!dariMaster) {
       return {
         issue: {

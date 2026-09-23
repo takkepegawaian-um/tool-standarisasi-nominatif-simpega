@@ -57,6 +57,19 @@ export function matchStatusAgainstKategori<T>(
   });
 }
 
+/**
+ * Fallback SETELAH exactMatch gagal: cocokkan raw value sebagai kata-kata awal persis dari nama
+ * master (mis. "Guru Besar" -> "Guru Besar (Profesor)") - batas kata (spasi), bukan substring
+ * bebas. Aman dipakai untuk Jabatan Fungsional Dosen KARENA hanya dipanggil setelah exactMatch:
+ * kalau raw persis "Lektor", exactMatch sudah menemukan master "Lektor" duluan sebelum fallback
+ * ini sempat jalan, jadi tidak akan salah nyasar ke "Lektor Kepala" (juga diawali kata "Lektor").
+ */
+export function prefixWordMatch<T>(list: T[], getName: (t: T) => string, raw: string): T | undefined {
+  const n = normalize(raw);
+  if (!n) return undefined;
+  return list.find((item) => normalize(getName(item)).startsWith(`${n} `));
+}
+
 const GOLONGAN_PATTERN = /\b(I{1,3}|IV)\/[a-eA-E]\b/;
 
 /** Ekstrak kode golongan (mis. "II/d") dari teks deskriptif seperti "Pengatur Tingkat I, II/d". */
