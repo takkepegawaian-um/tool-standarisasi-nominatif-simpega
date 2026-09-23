@@ -70,8 +70,28 @@ export const kunciStatusKepegawaian = (row: Pick<RawNominatifRow, "statusPegawai
   kunciKamus(row.statusPegawaiRaw);
 export const kunciGolongan = (row: Pick<RawNominatifRow, "golonganPangkatRaw">) =>
   kunciKamus(row.golonganPangkatRaw);
-export const kunciJabatan = (row: Pick<RawNominatifRow, "jabatanFungsionalRaw">) =>
-  kunciKamus(row.jabatanFungsionalRaw);
+/**
+ * Kunci kamus BIASANYA teks mentah kolomnya sendiri (supaya 1 resolusi otomatis berlaku ke
+ * SIAPA PUN yang teksnya persis sama, bukan cuma 1 NIP - misal typo yang sama, atau nama unit
+ * yang sama-sama belum di master). TAPI kalau teksnya KOSONG TOTAL, kunci berbasis teks jadi
+ * sama untuk SEMUA ORANG yang kosong, walau jawaban benarnya beda-beda per orang (mis. dua dosen
+ * kontrak yang jabatan fungsionalnya sama-sama tidak diisi SIMPEGA, padahal keduanya punya
+ * jenjang berbeda) - jadi utk kasus kosong, kunci dialihkan ke NIP supaya "ingat"-nya nempel ke
+ * ORANGNYA, bukan ke kekosongan itu sendiri. Begitu SIMPEGA akhirnya mengisi kolom itu utk NIP
+ * tsb, kunci otomatis kembali ke teks asli (ingatan lama disini jadi tidak terpakai lagi -
+ * bukan ditimpa, cuma kalah prioritas karena kuncinya sudah beda).
+ */
+function kunciPerNipJikaKosong(nip: string, ...teksMentah: string[]): string {
+  if (teksMentah.some((t) => t.trim())) return kunciKamus(...teksMentah);
+  return kunciKamus("NIP", nip);
+}
+
+export const kunciJabatan = (row: Pick<RawNominatifRow, "jabatanFungsionalRaw" | "nip">) =>
+  kunciPerNipJikaKosong(row.nip, row.jabatanFungsionalRaw);
+// Unit Kerja kosong SENGAJA TETAP 1 kunci utk semua orang (bukan per-NIP seperti Jabatan di
+// atas) - begitu kosong total, jawabannya SELALU sama ("Unit Kerja Belum Diketahui", lihat
+// resolveUnitKerja) apapun orangnya, jadi 1 resolusi memang seharusnya berlaku ke semua NIP
+// (termasuk NIP baru yang belum pernah muncul), bukan diingat per orang.
 export const kunciUnitKerja = (row: Pick<RawNominatifRow, "subagUnitKerjaRaw" | "unitKerjaIndukRaw">) =>
   kunciKamus(row.subagUnitKerjaRaw, row.unitKerjaIndukRaw);
 export const kunciJabatanTambahan = (row: Pick<RawNominatifRow, "jabatanTambahanRaw">) =>

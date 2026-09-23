@@ -291,7 +291,9 @@ export function ResolveForm({
             />
             <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
               <input type="checkbox" name="ingatJabatan" />
-              Ingat jabatan ini untuk teks Jabatan Fungsional mentah yang sama bulan berikutnya
+              {raw.jabatanFungsionalRaw.trim()
+                ? "Ingat jabatan ini untuk teks Jabatan Fungsional mentah yang sama bulan berikutnya"
+                : `Kolom Jabatan Fungsional kosong di file sumber - ingat jabatan ini KHUSUS untuk NIP ${raw.nip} (bukan untuk semua orang yang kolomnya kosong), sampai file sumber mengisi kolom ini sendiri`}
             </label>
           </div>
         </>
