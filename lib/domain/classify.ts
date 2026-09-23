@@ -37,7 +37,9 @@ export type ResolvedNominatif = {
   kategoriAkademisiLuarKode: string | null;
   unitAsalKode: string;
   tanggalMulaiKerja: Date;
-  jabatanTambahan: JabatanTambahanSlot | null;
+  /** Array, bukan single - skema mendukung maks 2 Jabatan Tambahan/bulan (lihat
+   * cobaPecahDuaJabatanTambahan), array kosong = tidak punya jabatan tambahan. */
+  jabatanTambahan: JabatanTambahanSlot[];
 };
 
 export type ClassifyResult =
@@ -344,15 +346,41 @@ function ekstrakStatusPengangkatan(raw: string): { sisaTeks: string; status: "Pl
   return { sisaTeks: raw.slice(m[0].length), status };
 }
 
+type UnitAtauProdi = { unit: { kode: string } } | { prodi: { kode: string } };
+
+/**
+ * Cocokkan sisa teks ke Unit Asal ATAU Program Studi - exact match dulu (persis sama persis),
+ * fallback ke sisa yang DIAWALI KATA UTUH nama unit/prodi (mis. sisa "D4 Tata Boga Fakultas
+ * Vokasi" vs master prodi "D4 Tata Boga" - sumber data sering menempel nama fakultas induk di
+ * belakang nama prodi/unit yang sebenarnya). Exact match otomatis menang kalau ada (namanya
+ * sama panjang dgn seluruh sisa, pasti lebih panjang dari prefix mana pun) - kalau cuma ada
+ * beberapa kandidat prefix, dipilih yang namanya PALING PANJANG (paling spesifik).
+ */
+function cariUnitAtauProdi(sisa: string, master: MasterCache): UnitAtauProdi | undefined {
+  type Kandidat = { kode: string; namaNorm: string; tipe: "unit" | "prodi" };
+  const semua: Kandidat[] = [
+    ...master.unitAsal.map((u) => ({ kode: u.kode, namaNorm: normalize(u.nama), tipe: "unit" as const })),
+    ...master.programStudi.map((p) => ({ kode: p.kode, namaNorm: normalize(p.nama), tipe: "prodi" as const })),
+  ];
+  let terbaik: Kandidat | undefined;
+  for (const k of semua) {
+    const cocok = k.namaNorm === sisa || sisa.startsWith(`${k.namaNorm} `);
+    if (!cocok) continue;
+    if (!terbaik || k.namaNorm.length > terbaik.namaNorm.length) terbaik = k;
+  }
+  if (!terbaik) return undefined;
+  return terbaik.tipe === "unit" ? { unit: { kode: terbaik.kode } } : { prodi: { kode: terbaik.kode } };
+}
+
 /**
  * Raw "Jabatan Tambahan" menggabungkan nama role + unit/prodi dalam 1 sel TANPA pemisah yang
  * konsisten - kadang koma ("Kepala Sub Direktorat Layanan Pendidikan, Direktorat Pendidikan"),
  * kadang tanpa apa pun ("Dekan Fakultas Ilmu Sosial"). Jadi dicari lewat KANDIDAT AWALAN dari
  * 79 nama role master (dicoba dari yang PALING PANJANG/spesifik dulu, supaya "Kepala Pusat
  * Evaluasi Pendidikan" tidak salah kepotong jadi "Kepala Pusat"), lalu sisanya (setelah dibuang
- * koma/spasi pemisah) divalidasi harus PERSIS cocok nama Unit Asal atau Program Studi. Kalau
+ * koma/spasi pemisah) dicocokkan ke Unit Asal/Program Studi lewat cariUnitAtauProdi. Kalau
  * sisa tidak cocok apa pun, kandidat itu ditolak dan dicoba kandidat role berikutnya - tetap
- * deterministik (exact match di kedua sisi), bukan tebakan posisi atau fuzzy.
+ * deterministik (exact/prefix-kata-utuh di kedua sisi), bukan tebakan posisi atau fuzzy.
  */
 export function pisahJabatanTambahanRaw(
   raw: string,
@@ -383,13 +411,54 @@ export function pisahJabatanTambahanRaw(
     if (sisa.startsWith(",")) sisa = sisa.slice(1).trim();
     if (!sisa) return { roleRaw: role.namaRole, sisaKosong: true, status };
 
-    const unit = master.unitAsal.find((u) => normalize(u.nama) === sisa);
-    if (unit) return { roleRaw: role.namaRole, unit: { kode: unit.kode }, sisaKosong: false, status };
-    const prodi = master.programStudi.find((p) => normalize(p.nama) === sisa);
-    if (prodi) return { roleRaw: role.namaRole, prodi: { kode: prodi.kode }, sisaKosong: false, status };
+    const match = cariUnitAtauProdi(sisa, master);
+    if (match && "unit" in match) return { roleRaw: role.namaRole, unit: match.unit, sisaKosong: false, status };
+    if (match && "prodi" in match) return { roleRaw: role.namaRole, prodi: match.prodi, sisaKosong: false, status };
   }
 
   return { roleRaw: sisaTeks, sisaKosong: false, status };
+}
+
+type SatuJabatanTambahanTerurai = {
+  role: { kode: string };
+  unit?: { kode: string };
+  prodi?: { kode: string };
+  status: "Plt" | "Pjs";
+};
+
+function uraiSatuJabatanTambahan(mentah: string, master: MasterCache): SatuJabatanTambahanTerurai | null {
+  const { roleRaw, unit, prodi, sisaKosong, status } = pisahJabatanTambahanRaw(mentah, master);
+  const role = exactMatch(master.jabatanTambahanRole, (r) => r.namaRole, roleRaw);
+  if (!role || (!sisaKosong && !unit && !prodi) || !status) return null;
+  return { role: { kode: role.kode }, unit, prodi, status };
+}
+
+/**
+ * Coba pecah "role1 ... dan role2 ..." jadi 2 Jabatan Tambahan terpisah (skema mendukung maks 2
+ * slot/bulan, lihat nominatif_bulanan_jabatan_tambahan). Cari SEMUA titik " dan " di teks (bisa
+ * lebih dari satu, termasuk yang cuma bagian dari nama resmi seperti "Fakultas Ekonomi dan
+ * Bisnis") dan coba tiap titik sebagai kandidat batas pemisah - HANYA diterima kalau KEDUA belah
+ * pihak lengkap terurai sendiri-sendiri (role+target+status Plt/Pjs EKSPLISIT ada di masing-
+ * masing bagian, bukan cuma di salah satu), supaya nama resmi yang kebetulan mengandung "dan"
+ * tidak akan pernah salah terpotong (belah yang salah otomatis gagal terurai, jadi dicoba titik
+ * "dan" berikutnya). Status pengangkatan SENGAJA disyaratkan eksplisit di kedua bagian (bukan
+ * lewat kamus) - kamus koreksi cuma mengenal 1 slot per baris, bukan pasangan.
+ */
+function cobaPecahDuaJabatanTambahan(
+  raw: string,
+  master: MasterCache
+): [SatuJabatanTambahanTerurai, SatuJabatanTambahanTerurai] | null {
+  const regex = /\s+dan\s+/gi;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(raw))) {
+    const kiri = raw.slice(0, m.index).trim();
+    const kanan = raw.slice(m.index + m[0].length).trim();
+    if (!kiri || !kanan) continue;
+    const kiriUrai = uraiSatuJabatanTambahan(kiri, master);
+    const kananUrai = uraiSatuJabatanTambahan(kanan, master);
+    if (kiriUrai && kananUrai) return [kiriUrai, kananUrai];
+  }
+  return null;
 }
 
 /**
@@ -403,9 +472,9 @@ export function resolveJabatanTambahan(
   master: MasterCache,
   kamus: KamusMap,
   kelompok: KelompokPegawai
-): { slot: JabatanTambahanSlot | null } | { issue: Issue } {
+): { slots: JabatanTambahanSlot[] } | { issue: Issue } {
   if (!row.jabatanTambahanRaw.trim() || kelompok === "Akademisi Luar UM") {
-    return { slot: null };
+    return { slots: [] };
   }
 
   const diingat = dariKamus(kamus, "JabatanTambahan", kunciJabatanTambahan(row));
@@ -417,7 +486,7 @@ export function resolveJabatanTambahan(
       (!decoded.unitAsalKode || master.unitAsal.some((u) => u.kode === decoded.unitAsalKode)) &&
       (!decoded.programStudiKode || master.programStudi.some((p) => p.kode === decoded.programStudiKode))
     ) {
-      return { slot: decoded };
+      return { slots: [decoded] };
     }
   }
 
@@ -428,34 +497,50 @@ export function resolveJabatanTambahan(
   // role (mis. "Ketua Program Studi <nama prodi>") - kalau raw persis nama role tanpa sisa apa
   // pun (mis. "Rektor", "Ketua Senat"), itu memang jabatan level Universitas yang tidak
   // punya/butuh target, bukan kegagalan pencarian.
-  if (!role || (!sisaKosong && !unit && !prodi)) {
+  if (role && (sisaKosong || unit || prodi)) {
+    // Role & unit/prodi ketemu. Kalau teksnya diawali "Plt."/"Pjs." eksplisit, itu SINYAL
+    // LANGSUNG status pengangkatan - langsung sukses tanpa review. Kalau tidak ada awalan itu,
+    // status TETAP tidak diasumsikan "Definitif" diam-diam - selalu perlu sekali resolusi manual
+    // (lalu diingat) sebelum bisa auto-resolve di bulan berikutnya.
+    if (status) {
+      return {
+        slots: [
+          {
+            jabatanTambahanRoleKode: role.kode,
+            unitAsalKode: unit?.kode ?? null,
+            programStudiKode: prodi?.kode ?? null,
+            statusPengangkatan: status,
+          },
+        ],
+      };
+    }
     return {
       issue: {
         alasan: "JabatanTambahanTidakDikenali",
-        detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" tidak bisa dipetakan lengkap (nama role ${role ? "cocok" : "TIDAK cocok"} master, unit/prodi ${unit || prodi ? "cocok" : "TIDAK cocok"} master).`,
+        detail: `Jabatan Tambahan "${row.jabatanTambahanRaw}" cocok ke role & unit/prodi, tapi Status Pengangkatan (Definitif/Plt/Pjs) tidak tersedia di data sumber - pilih manual sekali lalu centang "ingat".`,
       },
     };
   }
 
-  // Role & unit/prodi ketemu. Kalau teksnya diawali "Plt."/"Pjs." eksplisit, itu SINYAL LANGSUNG
-  // status pengangkatan - langsung sukses tanpa review. Kalau tidak ada awalan itu, status
-  // TETAP tidak diasumsikan "Definitif" diam-diam - selalu perlu sekali resolusi manual (lalu
-  // diingat) sebelum bisa auto-resolve di bulan berikutnya.
-  if (status) {
+  // Gagal sebagai 1 jabatan utuh - coba pecah jadi 2 ("role1 ... dan role2 ..."), lihat
+  // cobaPecahDuaJabatanTambahan. Cuma diterima kalau KEDUA belah pihak lengkap (termasuk status
+  // eksplisit) sendiri-sendiri, jadi aman dari nama resmi yang kebetulan mengandung kata "dan".
+  const pecah = cobaPecahDuaJabatanTambahan(row.jabatanTambahanRaw, master);
+  if (pecah) {
     return {
-      slot: {
-        jabatanTambahanRoleKode: role.kode,
-        unitAsalKode: unit?.kode ?? null,
-        programStudiKode: prodi?.kode ?? null,
-        statusPengangkatan: status,
-      },
+      slots: pecah.map((p) => ({
+        jabatanTambahanRoleKode: p.role.kode,
+        unitAsalKode: p.unit?.kode ?? null,
+        programStudiKode: p.prodi?.kode ?? null,
+        statusPengangkatan: p.status,
+      })),
     };
   }
 
   return {
     issue: {
       alasan: "JabatanTambahanTidakDikenali",
-      detail: `Jabatan Tambahan "${row.jabatanTambahanRaw}" cocok ke role & unit/prodi, tapi Status Pengangkatan (Definitif/Plt/Pjs) tidak tersedia di data sumber - pilih manual sekali lalu centang "ingat".`,
+      detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" tidak bisa dipetakan lengkap (nama role ${role ? "cocok" : "TIDAK cocok"} master, unit/prodi ${unit || prodi ? "cocok" : "TIDAK cocok"} master).`,
     },
   };
 }
@@ -518,9 +603,9 @@ export function classifyRow(row: RawNominatifRow, master: MasterCache, kamus: Ka
   else unitAsalKode = unit.kode;
 
   const jabatanTambahan = resolveJabatanTambahan(row, master, kamus, kelompok);
-  let jabatanTambahanSlot: JabatanTambahanSlot | null = null;
+  let jabatanTambahanSlots: JabatanTambahanSlot[] = [];
   if ("issue" in jabatanTambahan) issues.push(jabatanTambahan.issue);
-  else jabatanTambahanSlot = jabatanTambahan.slot;
+  else jabatanTambahanSlots = jabatanTambahan.slots;
 
   const nama = row.namaDenganGelar.trim() || row.namaTanpaGelar.trim();
   if (!nama) issues.push({ alasan: "Lainnya", detail: "Nama pegawai kosong di data sumber." });
@@ -558,7 +643,7 @@ export function classifyRow(row: RawNominatifRow, master: MasterCache, kamus: Ka
       kategoriAkademisiLuarKode,
       unitAsalKode,
       tanggalMulaiKerja: row.tanggalMasuk as Date,
-      jabatanTambahan: jabatanTambahanSlot,
+      jabatanTambahan: jabatanTambahanSlots,
     },
   };
 }

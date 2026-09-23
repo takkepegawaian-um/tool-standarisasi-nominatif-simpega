@@ -16,6 +16,7 @@ export async function loadMasterCache() {
     unitAsal,
     jabatanTambahanRole,
     programStudi,
+    unitInduk,
   ] = await Promise.all([
     prisma.jenisPegawai.findMany(),
     prisma.statusKepegawaian.findMany(),
@@ -27,6 +28,7 @@ export async function loadMasterCache() {
     prisma.unitAsal.findMany(),
     prisma.jabatanTambahanRole.findMany(),
     prisma.programStudi.findMany(),
+    prisma.unitInduk.findMany(),
   ]);
 
   return {
@@ -40,6 +42,7 @@ export async function loadMasterCache() {
     unitAsal,
     jabatanTambahanRole,
     programStudi,
+    unitInduk,
   };
 }
 

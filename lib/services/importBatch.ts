@@ -18,7 +18,7 @@ type NominatifRow = Omit<ResolvedNominatif, "jabatanTambahan"> & {
   id: string;
   pegawaiNip: string;
 };
-type JabatanTambahanRow = NonNullable<ResolvedNominatif["jabatanTambahan"]> & {
+type JabatanTambahanRow = ResolvedNominatif["jabatanTambahan"][number] & {
   nominatifBulananId: string;
 };
 type BarisBermasalahRow = {
@@ -66,8 +66,8 @@ export async function importBatch(
       const { jabatanTambahan, ...nominatifData } = result.data;
       const id = randomUUID();
       nominatifRows.push({ id, pegawaiNip: row.nip, ...nominatifData });
-      if (jabatanTambahan) {
-        jabatanTambahanRows.push({ nominatifBulananId: id, ...jabatanTambahan });
+      for (const slot of jabatanTambahan) {
+        jabatanTambahanRows.push({ nominatifBulananId: id, ...slot });
       }
     } else {
       barisBermasalahRows.push({

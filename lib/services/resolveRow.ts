@@ -82,9 +82,9 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
     await tx.nominatifBulananJabatanTambahan.deleteMany({
       where: { nominatifBulananId: nominatif.id },
     });
-    if (jabatanTambahan) {
-      await tx.nominatifBulananJabatanTambahan.create({
-        data: { nominatifBulananId: nominatif.id, ...jabatanTambahan },
+    if (jabatanTambahan.length > 0) {
+      await tx.nominatifBulananJabatanTambahan.createMany({
+        data: jabatanTambahan.map((slot) => ({ nominatifBulananId: nominatif.id, ...slot })),
       });
     }
 
@@ -195,8 +195,11 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
         update: { nilaiResolusi: input.data.unitAsalKode },
       });
     }
-    if (input.ingat.jabatanTambahan && jabatanTambahan) {
-      const nilai = encodeJabatanTambahan(jabatanTambahan);
+    // Form resolusi manual cuma pernah mengisi 0 atau 1 slot (lihat ResolveForm.tsx) - kamus
+    // koreksi juga cuma mengenal 1 slot per kunci, jadi cukup ambil elemen pertama saja.
+    const satuJabatanTambahan = jabatanTambahan[0] as JabatanTambahanSlot | undefined;
+    if (input.ingat.jabatanTambahan && satuJabatanTambahan) {
+      const nilai = encodeJabatanTambahan(satuJabatanTambahan);
       await tx.kamusKoreksi.upsert({
         where: {
           jenisField_kunciMentah: { jenisField: "JabatanTambahan", kunciMentah: kunciJabatanTambahan(rawRow) },

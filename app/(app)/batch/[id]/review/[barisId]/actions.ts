@@ -102,7 +102,9 @@ export async function resolveBarisBermasalah(
     jabatanFungsiUmumKode,
     kategoriAkademisiLuarKode: kelompok === "Akademisi Luar UM" ? kategoriAkademisiLuarKode : null,
     unitAsalKode,
-    jabatanTambahan,
+    // Form manual cuma pernah punya 0 atau 1 slot - lihat lib/domain/classify.ts utk kasus 2
+    // slot otomatis ("role1 dan role2"), yang tidak melewati form ini sama sekali.
+    jabatanTambahan: jabatanTambahan ? [jabatanTambahan] : [],
   };
 
   const { prisma } = await import("@/lib/db");

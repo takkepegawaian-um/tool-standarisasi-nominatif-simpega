@@ -67,18 +67,24 @@ export default async function ResolveRowPage({
   let prefillJabatanTambahanRoleKode: string | null = null;
   let prefillJabatanTambahanTargetKode: string | null = null;
   let prefillStatusPengangkatan: string | null = null;
+  let catatanJabatanTambahanKedua: string | null = null;
 
   if (prefillKelompok && prefillKelompok !== "Akademisi Luar UM" && raw.jabatanTambahanRaw.trim()) {
     prefillAdaJabatanTambahan = true;
     const jt = resolveJabatanTambahan(raw, master, kamus, prefillKelompok);
-    if ("slot" in jt && jt.slot) {
-      prefillJabatanTambahanRoleKode = jt.slot.jabatanTambahanRoleKode;
-      prefillJabatanTambahanTargetKode = jt.slot.unitAsalKode
-        ? `UNIT:${jt.slot.unitAsalKode}`
-        : jt.slot.programStudiKode
-          ? `PRODI:${jt.slot.programStudiKode}`
+    if ("slots" in jt && jt.slots.length > 0) {
+      const [slot, slotKedua] = jt.slots;
+      prefillJabatanTambahanRoleKode = slot.jabatanTambahanRoleKode;
+      prefillJabatanTambahanTargetKode = slot.unitAsalKode
+        ? `UNIT:${slot.unitAsalKode}`
+        : slot.programStudiKode
+          ? `PRODI:${slot.programStudiKode}`
           : null;
-      prefillStatusPengangkatan = jt.slot.statusPengangkatan;
+      prefillStatusPengangkatan = slot.statusPengangkatan;
+      if (slotKedua) {
+        const roleKedua = master.jabatanTambahanRole.find((r) => r.kode === slotKedua.jabatanTambahanRoleKode);
+        catatanJabatanTambahanKedua = `Sistem juga mendeteksi jabatan tambahan KEDUA secara otomatis ("${roleKedua?.namaRole ?? slotKedua.jabatanTambahanRoleKode}") dari teks mentah "${raw.jabatanTambahanRaw}" - form ini baru mendukung 1 slot, jadi kalau baris ini disimpan lewat sini, slot kedua itu TIDAK ikut tersimpan. Kalau memang ada 2 jabatan tambahan, upload ulang file aslinya supaya keduanya diproses otomatis tanpa lewat form ini.`;
+      }
     } else {
       // Kamus belum tahu Status Pengangkatan-nya, tapi role & unit/prodi mungkin tetap bisa
       // di-prefill dari pencocokan langsung supaya admin tidak perlu cari manual dari nol.
@@ -131,6 +137,12 @@ export default async function ResolveRowPage({
         </dl>
       </details>
 
+      {catatanJabatanTambahanKedua && (
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {catatanJabatanTambahanKedua}
+        </p>
+      )}
+
       <ResolveForm
         batchId={batchId}
         barisId={barisId}
@@ -157,6 +169,7 @@ export default async function ResolveRowPage({
           unitAsal: master.unitAsal,
           jabatanTambahanRole: master.jabatanTambahanRole,
           programStudi: master.programStudi,
+          unitInduk: master.unitInduk,
         }}
       />
     </div>

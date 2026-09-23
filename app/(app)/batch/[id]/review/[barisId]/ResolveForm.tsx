@@ -7,7 +7,7 @@ import { STATUS_PENGANGKATAN } from "@/lib/constants";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
 import { resolveBarisBermasalah, type ResolveState } from "./actions";
-import { tambahJabatanTambahanRole } from "./jabatanTambahanRoleActions";
+import { tambahJabatanTambahanRole, tambahUnitAsal } from "./masterDataActions";
 import { SearchableSelect } from "./SearchableSelect";
 
 type Master = {
@@ -20,6 +20,7 @@ type Master = {
   unitAsal: { kode: string; nama: string }[];
   jabatanTambahanRole: { kode: string; namaRole: string; berlakuUntuk: string }[];
   programStudi: { kode: string; nama: string }[];
+  unitInduk: { kode: string; nama: string }[];
 };
 
 type Prefill = {
@@ -76,6 +77,38 @@ export function ResolveForm({
   const [extraJabatanTambahanRole, setExtraJabatanTambahanRole] = useState<
     { kode: string; namaRole: string; berlakuUntuk: string }[]
   >([]);
+  // Unit yang baru ditambah lewat mini-form "+ Unit tidak ada? Tambah baru" di bawah - sama
+  // polanya dgn extraJabatanTambahanRole di atas.
+  const [extraUnitAsal, setExtraUnitAsal] = useState<{ kode: string; nama: string }[]>([]);
+  const [showTambahUnit, setShowTambahUnit] = useState(false);
+  const [unitBaruNama, setUnitBaruNama] = useState("");
+  const [unitBaruIndukKode, setUnitBaruIndukKode] = useState("");
+  const [unitBaruError, setUnitBaruError] = useState<string | null>(null);
+  const [unitBaruSaving, setUnitBaruSaving] = useState(false);
+  // Dipakai sebagai `key` SEKALIGUS `defaultValue` override utk memaksa SearchableSelect Unit/
+  // Prodi Jabatan Tambahan remount dgn unit yang baru dibuat langsung terpilih.
+  const [targetOverride, setTargetOverride] = useState<string | null>(null);
+
+  async function handleTambahUnit() {
+    if (!unitBaruNama.trim() || !unitBaruIndukKode) {
+      setUnitBaruError("Nama unit & Unit Induk wajib diisi.");
+      return;
+    }
+    setUnitBaruSaving(true);
+    setUnitBaruError(null);
+    try {
+      const created = await tambahUnitAsal(unitBaruNama, unitBaruIndukKode);
+      setExtraUnitAsal((prev) => [...prev, created]);
+      setTargetOverride(`UNIT:${created.kode}`);
+      setShowTambahUnit(false);
+      setUnitBaruNama("");
+      setUnitBaruIndukKode("");
+    } catch (err) {
+      setUnitBaruError(err instanceof Error ? err.message : "Gagal menambah unit baru.");
+    } finally {
+      setUnitBaruSaving(false);
+    }
+  }
 
   return (
     <form action={formAction} className="space-y-6 rounded-lg border border-slate-200 bg-white p-6">
@@ -312,11 +345,17 @@ export function ResolveForm({
                   Unit/Prodi Jabatan Tambahan
                 </label>
                 <SearchableSelect
+                  key={targetOverride ?? "target-default"}
                   name="jabatanTambahanTargetKode"
-                  defaultValue={prefill.jabatanTambahanTargetKode ?? ""}
+                  defaultValue={targetOverride ?? prefill.jabatanTambahanTargetKode ?? ""}
                   placeholder="Cari unit/prodi..."
                   options={[
                     ...master.unitAsal.map((u) => ({
+                      value: `UNIT:${u.kode}`,
+                      label: u.nama,
+                      group: "Unit Asal",
+                    })),
+                    ...extraUnitAsal.map((u) => ({
                       value: `UNIT:${u.kode}`,
                       label: u.nama,
                       group: "Unit Asal",
@@ -328,6 +367,63 @@ export function ResolveForm({
                     })),
                   ]}
                 />
+                {!showTambahUnit ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowTambahUnit(true)}
+                    className="mt-1 text-xs text-sidebar hover:underline"
+                  >
+                    + Unit tidak ada di daftar? Tambah baru
+                  </button>
+                ) : (
+                  <div className="mt-2 space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700">Nama Unit Baru</label>
+                      <input
+                        value={unitBaruNama}
+                        onChange={(e) => setUnitBaruNama(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-700">Unit Induk</label>
+                      <select
+                        value={unitBaruIndukKode}
+                        onChange={(e) => setUnitBaruIndukKode(e.target.value)}
+                        className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      >
+                        <option value="">Pilih unit induk...</option>
+                        {master.unitInduk.map((u) => (
+                          <option key={u.kode} value={u.kode}>
+                            {u.nama}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {unitBaruError && <p className="text-xs text-red-600">{unitBaruError}</p>}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={unitBaruSaving}
+                        onClick={handleTambahUnit}
+                        className="rounded-md bg-sidebar px-3 py-1.5 text-xs font-medium text-white hover:bg-sidebar-lighter disabled:opacity-50"
+                      >
+                        {unitBaruSaving ? "Menyimpan..." : "Simpan Unit Baru"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowTambahUnit(false)}
+                        className="rounded-md px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-100"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </div>
+                )}
+                <p className="mt-1 text-xs text-slate-500">
+                  Unit baru HANYA tersimpan di tool ini, ingat untuk tambahkan juga ke master
+                  SIMPEGA kalau memang unit resmi.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">Status Pengangkatan</label>
