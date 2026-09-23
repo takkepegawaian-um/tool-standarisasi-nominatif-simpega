@@ -11,16 +11,23 @@ export function SearchableSelect({
   options,
   defaultValue,
   placeholder,
+  createLabel,
+  onCreateOption,
 }: {
   name: string;
   options: SearchableOption[];
   defaultValue?: string;
   placeholder: string;
+  /** Kalau diisi, tampilkan tombol "Tambah ... sebagai <createLabel>" saat query tidak match apa pun. */
+  createLabel?: string;
+  onCreateOption?: (query: string) => Promise<SearchableOption>;
 }) {
   const [value, setValue] = useState(defaultValue ?? "");
   const selectedLabel = options.find((o) => o.value === value)?.label ?? "";
   const [query, setQuery] = useState(selectedLabel);
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,6 +63,26 @@ export function SearchableSelect({
     setValue(o.value);
     setQuery(o.label);
     setOpen(false);
+  }
+
+  const trimmedQuery = query.trim();
+  const showCreateOption =
+    !!onCreateOption &&
+    !!trimmedQuery &&
+    !options.some((o) => o.label.toLowerCase() === trimmedQuery.toLowerCase());
+
+  async function handleCreate() {
+    if (!onCreateOption) return;
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const created = await onCreateOption(trimmedQuery);
+      pick(created);
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : "Gagal menambah opsi baru.");
+    } finally {
+      setCreating(false);
+    }
   }
 
   return (
@@ -108,6 +135,18 @@ export function SearchableSelect({
               ))}
             </div>
           ))}
+          {showCreateOption && (
+            <button
+              type="button"
+              disabled={creating}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleCreate}
+              className="block w-full border-t border-slate-200 px-3 py-2 text-left text-sm text-sidebar hover:bg-slate-50 disabled:opacity-50"
+            >
+              {creating ? "Menambah..." : `+ Tambah "${trimmedQuery}" sebagai ${createLabel ?? "opsi baru"}`}
+            </button>
+          )}
+          {createError && <p className="border-t border-slate-200 px-3 py-2 text-xs text-red-600">{createError}</p>}
         </div>
       )}
     </div>

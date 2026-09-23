@@ -339,7 +339,15 @@ function ekstrakStatusPengangkatan(raw: string): { sisaTeks: string; status: "Pl
 export function pisahJabatanTambahanRaw(
   raw: string,
   master: MasterCache
-): { roleRaw: string; unit?: { kode: string }; prodi?: { kode: string }; status: "Plt" | "Pjs" | null } {
+): {
+  roleRaw: string;
+  unit?: { kode: string };
+  prodi?: { kode: string };
+  /** true = role match ditemukan TANPA sisa teks sama sekali (mis. "Rektor", "Ketua Senat") -
+   * berarti target unit/prodi memang tidak relevan, bukan gagal dicari. */
+  sisaKosong: boolean;
+  status: "Plt" | "Pjs" | null;
+} {
   const { sisaTeks, status } = ekstrakStatusPengangkatan(raw.trim());
   const rawNorm = normalize(sisaTeks);
 
@@ -355,15 +363,15 @@ export function pisahJabatanTambahanRaw(
   for (const role of kandidatRole) {
     let sisa = rawNorm.slice(normalize(role.namaRole).length).trim();
     if (sisa.startsWith(",")) sisa = sisa.slice(1).trim();
-    if (!sisa) return { roleRaw: role.namaRole, status };
+    if (!sisa) return { roleRaw: role.namaRole, sisaKosong: true, status };
 
     const unit = master.unitAsal.find((u) => normalize(u.nama) === sisa);
-    if (unit) return { roleRaw: role.namaRole, unit: { kode: unit.kode }, status };
+    if (unit) return { roleRaw: role.namaRole, unit: { kode: unit.kode }, sisaKosong: false, status };
     const prodi = master.programStudi.find((p) => normalize(p.nama) === sisa);
-    if (prodi) return { roleRaw: role.namaRole, prodi: { kode: prodi.kode }, status };
+    if (prodi) return { roleRaw: role.namaRole, prodi: { kode: prodi.kode }, sisaKosong: false, status };
   }
 
-  return { roleRaw: sisaTeks, status };
+  return { roleRaw: sisaTeks, sisaKosong: false, status };
 }
 
 /**
@@ -395,10 +403,14 @@ export function resolveJabatanTambahan(
     }
   }
 
-  const { roleRaw, unit, prodi, status } = pisahJabatanTambahanRaw(row.jabatanTambahanRaw, master);
+  const { roleRaw, unit, prodi, sisaKosong, status } = pisahJabatanTambahanRaw(row.jabatanTambahanRaw, master);
   const role = exactMatch(master.jabatanTambahanRole, (r) => r.namaRole, roleRaw);
 
-  if (!role || (!unit && !prodi)) {
+  // Target unit/prodi cuma wajib kalau teks mentahnya memang MENYISAKAN sesuatu setelah nama
+  // role (mis. "Ketua Program Studi <nama prodi>") - kalau raw persis nama role tanpa sisa apa
+  // pun (mis. "Rektor", "Ketua Senat"), itu memang jabatan level Universitas yang tidak
+  // punya/butuh target, bukan kegagalan pencarian.
+  if (!role || (!sisaKosong && !unit && !prodi)) {
     return {
       issue: {
         alasan: "JabatanTambahanTidakDikenali",

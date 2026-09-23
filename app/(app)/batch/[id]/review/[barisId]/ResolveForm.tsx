@@ -7,6 +7,7 @@ import { STATUS_PENGANGKATAN } from "@/lib/constants";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
 import { resolveBarisBermasalah, type ResolveState } from "./actions";
+import { tambahJabatanTambahanRole } from "./jabatanTambahanRoleActions";
 import { SearchableSelect } from "./SearchableSelect";
 
 type Master = {
@@ -69,6 +70,12 @@ export function ResolveForm({
   const [state, formAction] = useActionState<ResolveState, FormData>(boundAction, {});
   const [kelompok, setKelompok] = useState(prefill.kelompok ?? "Tendik");
   const [adaJabatanTambahan, setAdaJabatanTambahan] = useState(prefill.adaJabatanTambahan);
+  // Role yang baru ditambah lewat "+ Tambah ... sebagai jabatan tambahan baru" langsung masuk
+  // sini supaya bisa dipilih tanpa reload - master data SEBENARNYA (Prisma) sudah diperbarui
+  // oleh server action-nya sendiri, ini cuma salinan lokal utk render ulang daftar opsi.
+  const [extraJabatanTambahanRole, setExtraJabatanTambahanRole] = useState<
+    { kode: string; namaRole: string; berlakuUntuk: string }[]
+  >([]);
 
   return (
     <form action={formAction} className="space-y-6 rounded-lg border border-slate-200 bg-white p-6">
@@ -278,10 +285,27 @@ export function ResolveForm({
                   name="jabatanTambahanRoleKode"
                   defaultValue={prefill.jabatanTambahanRoleKode ?? ""}
                   placeholder="Cari jabatan tambahan..."
-                  options={master.jabatanTambahanRole
+                  options={[...master.jabatanTambahanRole, ...extraJabatanTambahanRole]
                     .filter((r) => r.berlakuUntuk === "Keduanya" || r.berlakuUntuk === kelompok)
                     .map((r) => ({ value: r.kode, label: r.namaRole }))}
+                  createLabel="jabatan tambahan baru"
+                  onCreateOption={async (query) => {
+                    const created = await tambahJabatanTambahanRole(
+                      query,
+                      kelompok as "Dosen" | "Tendik"
+                    );
+                    setExtraJabatanTambahanRole((prev) => [
+                      ...prev,
+                      { ...created, berlakuUntuk: kelompok },
+                    ]);
+                    return { value: created.kode, label: created.namaRole };
+                  }}
                 />
+                <p className="mt-1 text-xs text-slate-500">
+                  Tidak ada di daftar? Ketik nama lengkapnya lalu pilih &quot;+ Tambah...&quot; -
+                  role baru ini HANYA tersimpan di tool ini, ingat untuk tambahkan juga ke master
+                  SIMPEGA kalau memang jabatan resmi.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">
