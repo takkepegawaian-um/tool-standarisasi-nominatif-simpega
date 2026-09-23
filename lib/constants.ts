@@ -18,8 +18,10 @@ export const ALASAN_BARIS_BERMASALAH = [
   "StatusTidakDikenali",
   "GolonganTidakDikenali",
   "JabatanTidakDikenali",
+  "JabatanKosong",
   "JabatanTambahanTidakDikenali",
   "UnitKerjaTidakDikenali",
+  "UnitKerjaKosong",
   "PendidikanTidakDikenali",
   "Lainnya",
 ] as const;
@@ -29,9 +31,13 @@ export const ALASAN_LABEL: Record<AlasanBarisBermasalah, string> = {
   KlasifikasiAmbigu: "Klasifikasi kelompok ambigu",
   StatusTidakDikenali: "Status kepegawaian tidak dikenali",
   GolonganTidakDikenali: "Golongan tidak dikenali",
-  JabatanTidakDikenali: "Jabatan tidak dikenali",
-  JabatanTambahanTidakDikenali: "Jabatan tambahan tidak dikenali",
-  UnitKerjaTidakDikenali: "Unit kerja tidak dikenali",
+  JabatanTidakDikenali: "Jabatan tidak cocok master (perlu keputusan)",
+  // "Kosong" TERPISAH dari "tidak dikenali" (di atas) - bukan kegagalan pencocokan, kolomnya
+  // memang kosong total di file sumber, jadi butuh diisi dari sumber lain, bukan dipilihkan.
+  JabatanKosong: "Jabatan kosong di file sumber",
+  JabatanTambahanTidakDikenali: "Jabatan tambahan tidak cocok master (perlu keputusan)",
+  UnitKerjaTidakDikenali: "Unit kerja tidak cocok master (perlu keputusan)",
+  UnitKerjaKosong: "Unit kerja kosong di file sumber",
   PendidikanTidakDikenali: "Pendidikan tidak dikenali",
   Lainnya: "Lainnya",
 };

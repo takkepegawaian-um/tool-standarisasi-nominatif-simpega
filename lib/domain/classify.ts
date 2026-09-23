@@ -52,8 +52,10 @@ const ALASAN_PRIORITAS: AlasanBarisBermasalah[] = [
   "StatusTidakDikenali",
   "GolonganTidakDikenali",
   "JabatanTidakDikenali",
+  "JabatanKosong",
   "JabatanTambahanTidakDikenali",
   "UnitKerjaTidakDikenali",
+  "UnitKerjaKosong",
   "PendidikanTidakDikenali",
   "Lainnya",
 ];
@@ -275,6 +277,14 @@ export function resolveJabatan(
           : undefined;
       })();
     if (!dariMaster) {
+      if (!row.jabatanFungsionalRaw.trim()) {
+        return {
+          issue: {
+            alasan: "JabatanKosong",
+            detail: "Kolom Jabatan Fungsional kosong total di file sumber - bukan kegagalan pencocokan, isi manual dari sumber lain (mis. arsip/unit terkait).",
+          },
+        };
+      }
       return {
         issue: {
           alasan: "JabatanTidakDikenali",
@@ -302,12 +312,18 @@ export function resolveJabatan(
       return { jabatanFungsionalDosenKode: null, jabatanFungsionalTendikKode: null, jabatanFungsiUmumKode: umum.kode };
     }
 
+    if (!row.jabatanFungsionalRaw.trim()) {
+      return {
+        issue: {
+          alasan: "JabatanKosong",
+          detail: "Kolom Jabatan Fungsional kosong total di file sumber - bukan kegagalan pencocokan, isi manual dari sumber lain (mis. arsip/unit terkait).",
+        },
+      };
+    }
     return {
       issue: {
         alasan: "JabatanTidakDikenali",
-        detail: row.jabatanFungsionalRaw
-          ? `Jabatan Fungsional Tendik mentah "${row.jabatanFungsionalRaw}" tidak cocok master fungsional tertentu maupun Fungsi Umum Pelaksana.`
-          : "Tidak ada Jabatan Fungsional di data sumber untuk Tendik ini - pilih Fungsi Umum Pelaksana yang sesuai secara manual.",
+        detail: `Jabatan Fungsional Tendik mentah "${row.jabatanFungsionalRaw}" tidak cocok master fungsional tertentu maupun Fungsi Umum Pelaksana.`,
       },
     };
   }
@@ -328,6 +344,15 @@ export function resolveUnitKerja(
   for (const raw of kandidat) {
     const found = exactMatch(master.unitAsal, (u) => u.nama, raw);
     if (found) return { kode: found.kode };
+  }
+
+  if (kandidat.every((k) => !k.trim() || k.trim() === "-")) {
+    return {
+      issue: {
+        alasan: "UnitKerjaKosong",
+        detail: "Kolom Unit Kerja (Subag/Unit Kerja Induk/Direktorat-Fakultas/Unit Statistik) kosong total di file sumber - bukan kegagalan pencocokan, isi manual dari sumber lain (mis. arsip/unit terkait).",
+      },
+    };
   }
   return {
     issue: {
