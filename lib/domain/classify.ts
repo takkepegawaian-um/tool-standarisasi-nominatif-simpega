@@ -231,6 +231,18 @@ type JabatanResolusi = {
   jabatanFungsiUmumKode: string | null;
 };
 
+/**
+ * Alias istilah Jabatan Fungsional Dosen: file sumber SIMPEGA hampir selalu menulis "Tenaga
+ * Dosen" untuk jenjang paling dasar, TAPI master resmi (dipakai SIMPEGA & tool ini, sama-sama
+ * di-seed dari Rancangan_Master_Data_Kepegawaian_SIMPEGA_UM.xlsx) pakai istilah "Tenaga
+ * Pengajar" - JANGAN ganti nama di master jadi "Tenaga Dosen" (hasil export tool ini akan
+ * ditolak SIMPEGA karena masternya di sana TETAP "Tenaga Pengajar"). Cukup alias di sini saja,
+ * kunci sudah dinormalize (lowercase+trim) jadi konsisten dgn helper `normalize`.
+ */
+const ALIAS_JABATAN_FUNGSIONAL_DOSEN: Record<string, string> = {
+  "tenaga dosen": "Tenaga Pengajar",
+};
+
 export function resolveJabatan(
   row: RawNominatifRow,
   master: MasterCache,
@@ -247,7 +259,13 @@ export function resolveJabatan(
       // Master pakai label lengkap "Guru Besar (Profesor)" tapi sumber data biasa cuma tulis
       // "Guru Besar" - fallback ini HANYA jalan kalau exactMatch di atas gagal, jadi raw yang
       // persis "Lektor" tetap match ke "Lektor" duluan, tidak pernah nyasar ke "Lektor Kepala".
-      prefixWordMatch(master.jabatanFungsionalDosen, (j) => j.nama, row.jabatanFungsionalRaw);
+      prefixWordMatch(master.jabatanFungsionalDosen, (j) => j.nama, row.jabatanFungsionalRaw) ||
+      (() => {
+        const alias = ALIAS_JABATAN_FUNGSIONAL_DOSEN[normalize(row.jabatanFungsionalRaw)];
+        return alias
+          ? exactMatch(master.jabatanFungsionalDosen, (j) => j.nama, alias)
+          : undefined;
+      })();
     if (!dariMaster) {
       return {
         issue: {
