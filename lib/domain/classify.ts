@@ -455,6 +455,27 @@ function cariUnitAtauProdiDenganKataKategoriRole(
 }
 
 /**
+ * Alias peran-ke-kategori-unit: jabatan orangnya ("Direktur") beda KATA dari kategori resmi
+ * unitnya ("Direktorat") walau strukturnya identik (kepala unit itu) - beda dgn fallback di atas
+ * yang menempel ULANG kata role sendiri, ini GANTI ke kata lain. Dikonfirmasi ke master: 6
+ * "Direktorat ..." SUDAH ada persis sbg Unit Asal (UA-013..UA-018), cuma teks sumber selalu
+ * pakai "Direktur" (jabatan orangnya), bukan "Direktorat" (nama unitnya).
+ */
+const ALIAS_PERAN_KE_KATEGORI_UNIT: Record<string, string> = {
+  direktur: "direktorat",
+  sekretaris: "sekretariat",
+};
+
+function cariUnitAtauProdiDenganAliasPeran(
+  namaRole: string,
+  sisa: string,
+  master: MasterCache
+): UnitAtauProdi | undefined {
+  const kategori = ALIAS_PERAN_KE_KATEGORI_UNIT[normalize(namaRole)];
+  return kategori ? cariUnitAtauProdi(`${kategori} ${sisa}`, master) : undefined;
+}
+
+/**
  * Raw "Jabatan Tambahan" menggabungkan nama role + unit/prodi dalam 1 sel TANPA pemisah yang
  * konsisten - kadang koma ("Kepala Sub Direktorat Layanan Pendidikan, Direktorat Pendidikan"),
  * kadang tanpa apa pun ("Dekan Fakultas Ilmu Sosial"). Jadi dicari lewat KANDIDAT AWALAN dari
@@ -503,7 +524,9 @@ export function pisahJabatanTambahanRaw(
     }
 
     const match =
-      cariUnitAtauProdi(sisa, master) ?? cariUnitAtauProdiDenganKataKategoriRole(role.namaRole, sisa, master);
+      cariUnitAtauProdi(sisa, master) ??
+      cariUnitAtauProdiDenganKataKategoriRole(role.namaRole, sisa, master) ??
+      cariUnitAtauProdiDenganAliasPeran(role.namaRole, sisa, master);
     if (match && "unit" in match) return { roleRaw: role.namaRole, unit: match.unit, sisaKosong: false, status };
     if (match && "prodi" in match) return { roleRaw: role.namaRole, prodi: match.prodi, sisaKosong: false, status };
   }
