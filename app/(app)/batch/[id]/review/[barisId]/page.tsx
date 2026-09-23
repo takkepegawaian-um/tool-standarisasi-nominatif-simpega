@@ -28,6 +28,19 @@ export default async function ResolveRowPage({
   const baris = await prisma.barisBermasalah.findUnique({ where: { id: barisId } });
   if (!baris) notFound();
 
+  const batch = await prisma.uploadBatch.findUniqueOrThrow({ where: { id: baris.uploadBatchId } });
+
+  // Snapshot bulan SEBELUMNYA (kalau ada) utk NIP yang sama - dipakai sbg SARAN pengisian saat
+  // field mentah kosong total di file sumber (bukan auto-terapkan, admin tetap harus konfirmasi
+  // - unit kerja/jabatan orang BISA berubah antar bulan, ini cuma titik awal drpd cari dari nol).
+  const snapshotSebelumnya = await prisma.nominatifBulanan.findFirst({
+    where: {
+      pegawaiNip: baris.nip,
+      OR: [{ tahun: { lt: batch.tahun } }, { tahun: batch.tahun, bulan: { lt: batch.bulan } }],
+    },
+    orderBy: [{ tahun: "desc" }, { bulan: "desc" }],
+  });
+
   const [master, kamus] = await Promise.all([loadMasterCache(), loadKamusMap()]);
   const raw = baris.dataMentah as unknown as RawNominatifRow;
 
@@ -61,7 +74,28 @@ export default async function ResolveRowPage({
   }
 
   const unit = resolveUnitKerja(raw, master, kamus);
-  const prefillUnit = "kode" in unit ? unit.kode : null;
+  let prefillUnit = "kode" in unit ? unit.kode : null;
+
+  let catatanSaranBulanLalu: string | null = null;
+  if (!prefillUnit && snapshotSebelumnya?.unitAsalKode) {
+    prefillUnit = snapshotSebelumnya.unitAsalKode;
+    catatanSaranBulanLalu =
+      "Kolom Unit Kerja kosong total di file sumber - Unit Kerja di atas disarankan dari data bulan sebelumnya (belum tentu masih sama, konfirmasi dulu sebelum simpan).";
+  }
+  if (!prefillJabatan && snapshotSebelumnya) {
+    if (snapshotSebelumnya.jabatanFungsionalDosenKode) {
+      prefillJabatan = `DOSEN:${snapshotSebelumnya.jabatanFungsionalDosenKode}`;
+    } else if (snapshotSebelumnya.jabatanFungsionalTendikKode) {
+      prefillJabatan = `TENDIK:${snapshotSebelumnya.jabatanFungsionalTendikKode}`;
+    } else if (snapshotSebelumnya.jabatanFungsiUmumKode) {
+      prefillJabatan = `UMUM:${snapshotSebelumnya.jabatanFungsiUmumKode}`;
+    }
+    if (prefillJabatan) {
+      catatanSaranBulanLalu =
+        (catatanSaranBulanLalu ? `${catatanSaranBulanLalu} ` : "") +
+        "Jabatan Fungsional/Fungsi kosong total di file sumber - disarankan dari data bulan sebelumnya (belum tentu masih sama, konfirmasi dulu sebelum simpan).";
+    }
+  }
 
   let prefillAdaJabatanTambahan = false;
   let prefillJabatanTambahanRoleKode: string | null = null;
@@ -136,6 +170,12 @@ export default async function ResolveRowPage({
           <dd className="col-span-2">{raw.unitStatistikRaw || "-"}</dd>
         </dl>
       </details>
+
+      {catatanSaranBulanLalu && (
+        <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-800">
+          {catatanSaranBulanLalu} (Sumber saran: snapshot {snapshotSebelumnya?.bulan}/{snapshotSebelumnya?.tahun}.)
+        </p>
+      )}
 
       {catatanJabatanTambahanKedua && (
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
