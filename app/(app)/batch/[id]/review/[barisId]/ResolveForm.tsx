@@ -130,7 +130,7 @@ export function ResolveForm({
         </div>
         <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
           <input type="checkbox" name="ingatKlasifikasi" />
-          Ingat klasifikasi ini untuk kombinasi Jenis Pegawai/Status Pegawai yang sama bulan berikutnya
+          {`Ingat klasifikasi ini KHUSUS untuk NIP ${raw.nip} bulan berikutnya (bukan untuk semua orang dengan Jenis/Status Pegawai yang sama - kombinasi teks yang sama bisa berarti beda untuk orang berbeda)`}
         </label>
       </fieldset>
 
@@ -214,7 +214,7 @@ export function ResolveForm({
           </select>
           <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
             <input type="checkbox" name="ingatKategori" />
-            Ingat kategori ini untuk nilai mentah yang sama bulan berikutnya
+            {`Ingat kategori ini KHUSUS untuk NIP ${raw.nip} bulan berikutnya`}
           </label>
         </div>
       ) : (

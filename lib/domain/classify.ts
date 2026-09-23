@@ -62,10 +62,18 @@ const ALASAN_PRIORITAS: AlasanBarisBermasalah[] = [
 
 /** Kunci kamus koreksi per jenis field - dipakai baik oleh classify.ts maupun resolveRow.ts
  *  supaya keduanya selalu sepakat soal bagaimana sebuah nilai mentah "diingat". */
-export const kunciKlasifikasi = (row: Pick<RawNominatifRow, "jenisPegawaiRaw" | "statusPegawaiRaw">) =>
-  kunciKamus(row.jenisPegawaiRaw, row.statusPegawaiRaw);
-export const kunciKategoriAkademisiLuar = (row: Pick<RawNominatifRow, "jenisPegawaiRaw" | "statusPegawaiRaw">) =>
-  kunciKamus(row.statusPegawaiRaw, row.jenisPegawaiRaw);
+/**
+ * Klasifikasi & Kategori Akademisi Luar SENGAJA per-NIP, bukan per-teks (Jenis Pegawai+Status
+ * Pegawai) - terbukti dari kasus nyata: 2 dosen sama-sama "Dosen"+"CPTNA" (teks identik), yang
+ * satu memang dosen kontrak biasa, yang satu lagi dokter spesialis praktisi RS yang mengajar
+ * paruh waktu (harus direklasifikasi manual ke Akademisi Luar UM "Praktisi Mengajar"). Kalau
+ * kuncinya teks, "ingat" utk dokter itu akan SALAH ikut menerapkan Akademisi Luar UM ke dosen
+ * kontrak biasa lainnya yang kebetulan kombinasi Jenis+Status-nya sama. Beda dgn field lain
+ * (Status Kepegawaian, Golongan, Jabatan Tambahan) yang teksnya sendiri sudah cukup spesifik
+ * membedakan orang (nama unit/jabatan spesifik jarang kebetulan sama tapi beda makna).
+ */
+export const kunciKlasifikasi = (row: Pick<RawNominatifRow, "nip">) => kunciKamus("NIP", row.nip);
+export const kunciKategoriAkademisiLuar = (row: Pick<RawNominatifRow, "nip">) => kunciKamus("NIP", row.nip);
 export const kunciStatusKepegawaian = (row: Pick<RawNominatifRow, "statusPegawaiRaw">) =>
   kunciKamus(row.statusPegawaiRaw);
 export const kunciGolongan = (row: Pick<RawNominatifRow, "golonganPangkatRaw">) =>
