@@ -12,6 +12,7 @@ const now = new Date();
 export default function UploadPage() {
   const [error, setError] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<"idle" | "mengunggah" | "memproses">("idle");
+  const [progress, setProgress] = useState(0);
   const formRef = useRef<HTMLFormElement>(null);
 
   const pending = status !== "idle";
@@ -36,9 +37,16 @@ export default function UploadPage() {
 
     try {
       setStatus("mengunggah");
+      setProgress(0);
       const blob = await upload(file.name, file, {
         access: "public",
         handleUploadUrl: "/api/upload-token",
+        // Wajib multipart: default-nya SATU request PUT besar - di koneksi lambat/tidak stabil
+        // (kasus nyata: kantor SDM), sekali putus di menit ke-2 langsung "Failed to fetch" dan
+        // seluruh 4,5MB harus diulang dari nol. Multipart memecah jadi beberapa bagian yang
+        // di-retry independen kalau gagal, jauh lebih tahan koneksi jelek.
+        multipart: true,
+        onUploadProgress: ({ percentage }) => setProgress(percentage),
       });
 
       setStatus("memproses");
@@ -115,6 +123,18 @@ export default function UploadPage() {
             className="mt-1 block w-full text-sm text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium hover:file:bg-slate-200"
           />
         </div>
+
+        {status === "mengunggah" && (
+          <div>
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-sidebar transition-all"
+                style={{ width: `${Math.max(progress, 2)}%` }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{Math.round(progress)}% terunggah</p>
+          </div>
+        )}
 
         {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
