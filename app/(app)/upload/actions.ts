@@ -2,22 +2,22 @@
 
 import { redirect } from "next/navigation";
 
-import { del } from "@vercel/blob";
-
+import { prisma } from "@/lib/db";
 import { auth } from "@/lib/auth";
 import { ColumnMappingError } from "@/lib/excel/types";
 import { importBatch } from "@/lib/services/importBatch";
 
 export type UploadState = { error?: string };
 
-// File mentah diunggah LANGSUNG dari browser ke Vercel Blob (lihat app/api/upload-token/route.ts)
-// supaya tidak lewat batas keras ~4.5MB body request function Vercel - action ini cuma menerima
-// URL-nya, ambil isinya sekali di server, lalu segera hapus dari Blob (raw export sensitif tidak
-// perlu tersimpan lebih dari sesaat, konsisten dengan kebijakan minimisasi data proyek ini).
+// File mentah dirakit dari potongan-potongan kecil yang sudah dikirim satu-satu ke
+// /api/upload-chunk (lihat prisma/schema.prisma untuk alasan pendekatan ini, bukan Vercel Blob).
+// Action ini menggabungkan semua potongan uploadId ini, memprosesnya seperti biasa, lalu
+// membersihkan potongan-potongan itu dari DB (tidak perlu tersimpan lebih dari sesaat).
 export async function processUploadedNominatif(
   bulan: number,
   tahun: number,
-  blobUrl: string,
+  uploadId: string,
+  totalChunks: number,
   namaFileAsli: string
 ): Promise<UploadState> {
   const session = await auth();
@@ -31,10 +31,15 @@ export async function processUploadedNominatif(
 
   let uploadBatchId: string;
   try {
-    const response = await fetch(blobUrl);
-    if (!response.ok) return { error: "Gagal mengambil file yang sudah diunggah." };
-    const buffer = Buffer.from(await response.arrayBuffer());
+    const chunks = await prisma.uploadChunk.findMany({
+      where: { uploadId },
+      orderBy: { chunkIndex: "asc" },
+    });
+    if (chunks.length !== totalChunks || chunks.some((c, i) => c.chunkIndex !== i)) {
+      return { error: "Bagian file yang diterima tidak lengkap, silakan upload ulang." };
+    }
 
+    const buffer = Buffer.concat(chunks.map((c) => c.data));
     const result = await importBatch(buffer, namaFileAsli, bulan, tahun, session.user.id);
     uploadBatchId = result.uploadBatchId;
   } catch (err) {
@@ -43,9 +48,7 @@ export async function processUploadedNominatif(
     }
     throw err;
   } finally {
-    await del(blobUrl).catch(() => {
-      // Kegagalan hapus blob sementara bukan hal fatal - tidak perlu gagalkan proses upload.
-    });
+    await prisma.uploadChunk.deleteMany({ where: { uploadId } });
   }
 
   redirect(`/batch/${uploadBatchId}`);

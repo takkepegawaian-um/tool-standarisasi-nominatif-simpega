@@ -268,6 +268,22 @@ model NominatifBulanan {
   @@map("nominatif_bulanan")
 }
 
+// Penampung sementara potongan file upload mentah - client memecah file jadi beberapa bagian
+// kecil (jauh di bawah batas keras ~4.5MB body request function Vercel) dan mengirim tiap
+// bagian sebagai request terpisah ke route yang sama (same-origin, tanpa CORS) alih-alih upload
+// langsung ke Vercel Blob (dicoba & dibatalkan - endpoint client-upload Vercel Blob ternyata
+// punya bug produksi yang belum diperbaiki, lihat riwayat commit). Baris di sini dihapus lagi
+// begitu semua bagian sudah digabung & diproses.
+model UploadChunk {
+  uploadId   String
+  chunkIndex Int
+  data       Bytes
+  dibuatPada DateTime @default(now())
+
+  @@id([uploadId, chunkIndex])
+  @@map("upload_chunk")
+}
+
 model NominatifBulananJabatanTambahan {
   id                      String  @id @default(cuid())
   nominatifBulananId      String

@@ -1,6 +1,5 @@
 "use client";
 
-import { upload } from "@vercel/blob/client";
 import { useRef, useState } from "react";
 
 import { NAMA_BULAN } from "@/lib/constants";
@@ -9,13 +8,39 @@ import { processUploadedNominatif } from "./actions";
 
 const now = new Date();
 
-const MAX_UPLOAD_ATTEMPTS = 3;
+// Jauh di bawah batas keras ~4.5MB body request function Vercel - beri banyak ruang utk
+// overhead FormData/header, dan supaya kegagalan 1 potongan cuma perlu diulang potongan itu
+// sendiri (bukan seluruh file).
+const CHUNK_SIZE = 2 * 1024 * 1024;
+const MAX_CHUNK_ATTEMPTS = 3;
+
+async function uploadChunkWithRetry(uploadId: string, chunkIndex: number, chunk: Blob) {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= MAX_CHUNK_ATTEMPTS; attempt++) {
+    try {
+      const formData = new FormData();
+      formData.set("uploadId", uploadId);
+      formData.set("chunkIndex", String(chunkIndex));
+      formData.set("chunk", chunk);
+
+      const response = await fetch("/api/upload-chunk", { method: "POST", body: formData });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? `Gagal mengunggah bagian ${chunkIndex + 1} (${response.status}).`);
+      }
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_CHUNK_ATTEMPTS) await new Promise((r) => setTimeout(r, 1500 * attempt));
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("Gagal mengunggah bagian file.");
+}
 
 export default function UploadPage() {
   const [error, setError] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<"idle" | "mengunggah" | "memproses">("idle");
   const [progress, setProgress] = useState(0);
-  const [attempt, setAttempt] = useState(1);
   const formRef = useRef<HTMLFormElement>(null);
 
   const pending = status !== "idle";
@@ -41,48 +66,24 @@ export default function UploadPage() {
     setStatus("mengunggah");
     setProgress(0);
 
-    // TIDAK pakai multipart: true - endpoint kontrolnya (vercel.com/api/blob/mpu) punya bug CORS
-    // yang belum diperbaiki Vercel di produksi (dikonfirmasi laporan publik developer lain, bukan
-    // masalah dari kode kita). Jalur single-PUT (default) PUT langsung ke domain storage, tidak
-    // lewat endpoint bermasalah itu - tapi jadi tidak ada retry bawaan utk 1 request besar, jadi
-    // retry manual di sini utk tahan koneksi kantor yang lambat/kadang putus.
-    let blob: Awaited<ReturnType<typeof upload>> | null = null;
-    let lastErr: unknown;
-    for (let i = 1; i <= MAX_UPLOAD_ATTEMPTS; i++) {
-      setAttempt(i);
-      setProgress(0);
-      try {
-        blob = await upload(file.name, file, {
-          access: "public",
-          handleUploadUrl: "/api/upload-token",
-          onUploadProgress: ({ percentage }) => setProgress(percentage),
-        });
-        break;
-      } catch (err) {
-        lastErr = err;
-        if (i < MAX_UPLOAD_ATTEMPTS) await new Promise((r) => setTimeout(r, 2000 * i));
-      }
-    }
-
-    if (!blob) {
-      setError(
-        lastErr instanceof Error
-          ? `Gagal mengunggah setelah ${MAX_UPLOAD_ATTEMPTS} percobaan: ${lastErr.message}`
-          : "Gagal mengunggah file."
-      );
-      setStatus("idle");
-      return;
-    }
+    const uploadId = crypto.randomUUID();
+    const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
 
     try {
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = file.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        await uploadChunkWithRetry(uploadId, i, chunk);
+        setProgress(Math.round(((i + 1) / totalChunks) * 100));
+      }
+
       setStatus("memproses");
-      const result = await processUploadedNominatif(bulan, tahun, blob.url, file.name);
+      const result = await processUploadedNominatif(bulan, tahun, uploadId, totalChunks, file.name);
       if (result?.error) {
         setError(result.error);
         setStatus("idle");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal memproses file.");
+      setError(err instanceof Error ? err.message : "Gagal mengunggah file.");
       setStatus("idle");
     }
   }
@@ -158,10 +159,7 @@ export default function UploadPage() {
                 style={{ width: `${Math.max(progress, 2)}%` }}
               />
             </div>
-            <p className="mt-1 text-xs text-slate-500">
-              {Math.round(progress)}% terunggah
-              {attempt > 1 ? ` (percobaan ke-${attempt} dari ${MAX_UPLOAD_ATTEMPTS})` : ""}
-            </p>
+            <p className="mt-1 text-xs text-slate-500">{progress}% terunggah</p>
           </div>
         )}
 
