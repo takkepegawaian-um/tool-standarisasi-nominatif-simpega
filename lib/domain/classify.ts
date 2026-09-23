@@ -349,14 +349,42 @@ function ekstrakStatusPengangkatan(raw: string): { sisaTeks: string; status: "Pl
 type UnitAtauProdi = { unit: { kode: string } } | { prodi: { kode: string } };
 
 /**
- * Cocokkan sisa teks ke Unit Asal ATAU Program Studi - exact match dulu (persis sama persis),
- * fallback ke sisa yang DIAWALI KATA UTUH nama unit/prodi (mis. sisa "D4 Tata Boga Fakultas
- * Vokasi" vs master prodi "D4 Tata Boga" - sumber data sering menempel nama fakultas induk di
- * belakang nama prodi/unit yang sebenarnya). Exact match otomatis menang kalau ada (namanya
- * sama panjang dgn seluruh sisa, pasti lebih panjang dari prefix mana pun) - kalau cuma ada
- * beberapa kandidat prefix, dipilih yang namanya PALING PANJANG (paling spesifik).
+ * Singkatan fakultas yang TERKONFIRMASI muncul di data sumber ("Koordinator Tata Usaha, FIS" /
+ * "-FT" / "..., FMIPA") - fakultas-fakultas ini JUGA terdaftar sebagai Unit Asal-nya sendiri
+ * (bukan cuma Unit Induk), jadi alias ke nama lengkapnya langsung bisa dicocokkan. Sengaja HANYA
+ * yang benar-benar terlihat di data, bukan menebak singkatan fakultas lain yang belum pernah
+ * muncul (mis. Fakultas Ekonomi dan Bisnis bisa saja "FEB" atau lainnya - tidak ditebak).
+ */
+const ALIAS_SINGKATAN_FAKULTAS: Record<string, string> = {
+  // 6 baris pertama terkonfirmasi langsung dari data sumber nyata (pola berulang "Koordinator
+  // Tata Usaha, <singkatan>" utk fakultas yang berbeda-beda).
+  fis: "Fakultas Ilmu Sosial",
+  ft: "Fakultas Teknik",
+  fmipa: "Fakultas Matematika dan Ilmu Pengetahuan Alam",
+  fip: "Fakultas Ilmu Pendidikan",
+  fs: "Fakultas Sastra",
+  feb: "Fakultas Ekonomi dan Bisnis",
+  // 4 di bawah singkatan baku sama tapi belum terlihat langsung di data - aman ditambahkan,
+  // kalau ternyata salah/tidak dipakai alias ini cuma tidak pernah ke-trigger (tidak pernah
+  // salah cocok ke fakultas lain).
+  fk: "Fakultas Kedokteran",
+  fpsi: "Fakultas Psikologi",
+  fv: "Fakultas Vokasi",
+  fik: "Fakultas Ilmu Keolahragaan",
+};
+
+/**
+ * Cocokkan sisa teks ke Unit Asal ATAU Program Studi - exact match dulu (persis sama persis,
+ * termasuk lewat alias singkatan fakultas di atas), fallback ke sisa yang DIAWALI KATA UTUH
+ * nama unit/prodi (mis. sisa "D4 Tata Boga Fakultas Vokasi" vs master prodi "D4 Tata Boga" -
+ * sumber data sering menempel nama fakultas induk di belakang nama prodi/unit yang sebenarnya).
+ * Exact match otomatis menang kalau ada (namanya sama panjang dgn seluruh sisa, pasti lebih
+ * panjang dari prefix mana pun) - kalau cuma ada beberapa kandidat prefix, dipilih yang namanya
+ * PALING PANJANG (paling spesifik).
  */
 function cariUnitAtauProdi(sisa: string, master: MasterCache): UnitAtauProdi | undefined {
+  const sisaSetelahAlias = normalize(ALIAS_SINGKATAN_FAKULTAS[sisa] ?? sisa);
+
   type Kandidat = { kode: string; namaNorm: string; tipe: "unit" | "prodi" };
   const semua: Kandidat[] = [
     ...master.unitAsal.map((u) => ({ kode: u.kode, namaNorm: normalize(u.nama), tipe: "unit" as const })),
@@ -364,12 +392,35 @@ function cariUnitAtauProdi(sisa: string, master: MasterCache): UnitAtauProdi | u
   ];
   let terbaik: Kandidat | undefined;
   for (const k of semua) {
-    const cocok = k.namaNorm === sisa || sisa.startsWith(`${k.namaNorm} `);
+    const cocok = k.namaNorm === sisaSetelahAlias || sisaSetelahAlias.startsWith(`${k.namaNorm} `);
     if (!cocok) continue;
     if (!terbaik || k.namaNorm.length > terbaik.namaNorm.length) terbaik = k;
   }
   if (!terbaik) return undefined;
   return terbaik.tipe === "unit" ? { unit: { kode: terbaik.kode } } : { prodi: { kode: terbaik.kode } };
+}
+
+/**
+ * Fallback KHUSUS: kata kategori generik di akhir nama role (mis. "Departemen" pada "Ketua
+ * Departemen", "Lembaga" pada "Ketua Lembaga") sebenarnya SERING jadi awalan nama unit
+ * resminya sendiri ("Departemen Sosiologi"), bukan murni bagian dari role - jadi role
+ * "menghabiskan" kata yang seharusnya jadi awalan target. Coba tempelkan balik 1-3 kata
+ * terakhir nama role ke depan sisa, cek tiap hasil tempelan lewat cariUnitAtauProdi - HANYA
+ * berhasil kalau memang ada unit/prodi resmi yang cocok, jadi aman dari salah tebak
+ * (rekonstruksi yang salah otomatis tidak match apa pun & fallback ini dilewati).
+ */
+function cariUnitAtauProdiDenganKataKategoriRole(
+  namaRole: string,
+  sisa: string,
+  master: MasterCache
+): UnitAtauProdi | undefined {
+  const kataRole = normalize(namaRole).split(" ");
+  for (let k = 1; k < kataRole.length && k <= 3; k++) {
+    const tempel = `${kataRole.slice(-k).join(" ")} ${sisa}`;
+    const match = cariUnitAtauProdi(tempel, master);
+    if (match) return match;
+  }
+  return undefined;
 }
 
 /**
@@ -395,7 +446,10 @@ export function pisahJabatanTambahanRaw(
   status: "Plt" | "Pjs" | null;
 } {
   const { sisaTeks, status } = ekstrakStatusPengangkatan(raw.trim());
-  const rawNorm = normalize(sisaTeks);
+  // Master SELALU pakai singkatan "UPT" (mis. "UPT Layanan Pengadaan"), tapi sumber data sering
+  // menulis lengkap "Unit Pelaksana Teknis" - alias di level teks mentah supaya baik peran
+  // ("Kepala UPT") maupun nama unitnya sendiri konsisten cocok ke master.
+  const rawNorm = normalize(sisaTeks).replace(/\bunit pelaksana teknis\b/g, "upt");
 
   const kandidatRole = master.jabatanTambahanRole
     .filter((r) => {
@@ -408,10 +462,17 @@ export function pisahJabatanTambahanRaw(
 
   for (const role of kandidatRole) {
     let sisa = rawNorm.slice(normalize(role.namaRole).length).trim();
-    if (sisa.startsWith(",")) sisa = sisa.slice(1).trim();
+    if (sisa.startsWith(",") || sisa.startsWith("-")) sisa = sisa.slice(1).trim();
     if (!sisa) return { roleRaw: role.namaRole, sisaKosong: true, status };
+    // Nama institusi sendiri ditempel di belakang role level-Universitas (mis. "Rektor
+    // Universitas Negeri Malang", "Sekretaris Universitas Negeri Malang") - redundan (cuma ada
+    // 1 UM), setara dgn sisa kosong, bukan target sungguhan yang perlu dicocokkan ke unit/prodi.
+    if (sisa === normalize("Universitas Negeri Malang")) {
+      return { roleRaw: role.namaRole, sisaKosong: true, status };
+    }
 
-    const match = cariUnitAtauProdi(sisa, master);
+    const match =
+      cariUnitAtauProdi(sisa, master) ?? cariUnitAtauProdiDenganKataKategoriRole(role.namaRole, sisa, master);
     if (match && "unit" in match) return { roleRaw: role.namaRole, unit: match.unit, sisaKosong: false, status };
     if (match && "prodi" in match) return { roleRaw: role.namaRole, prodi: match.prodi, sisaKosong: false, status };
   }
