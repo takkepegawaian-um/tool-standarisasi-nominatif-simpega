@@ -49,5 +49,22 @@
   },
   {
     "kode": "IV/e"
-  }
+  },
+  { "kode": "I" },
+  { "kode": "II" },
+  { "kode": "III" },
+  { "kode": "IV" },
+  { "kode": "V" },
+  { "kode": "VI" },
+  { "kode": "VII" },
+  { "kode": "VIII" },
+  { "kode": "IX" },
+  { "kode": "X" },
+  { "kode": "XI" },
+  { "kode": "XII" },
+  { "kode": "XIII" },
+  { "kode": "XIV" },
+  { "kode": "XV" },
+  { "kode": "XVI" },
+  { "kode": "XVII" }
 ]

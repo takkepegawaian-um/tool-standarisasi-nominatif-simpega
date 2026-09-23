@@ -5,6 +5,7 @@ import type { KamusMap, MasterCache } from "./masterCache";
 import {
   exactMatch,
   extractGolonganCode,
+  extractGolonganPPPK,
   kunciKamus,
   matchJabatanFungsionalTendik,
   matchStatusAgainstKategori,
@@ -206,7 +207,12 @@ export function resolveGolongan(
   const diingat = dariKamus(kamus, "Golongan", kunciGolongan(row));
   if (diingat && master.golongan.some((g) => g.kode === diingat)) return { kode: diingat };
 
-  const extracted = extractGolonganCode(row.golonganPangkatRaw);
+  // PPPK pakai skala Jenjang I-XVII (romawi polos), bukan golongan ruang PNS ("II/d") - lihat
+  // catatan di extractGolonganPPPK.
+  const extracted =
+    normalize(row.statusPegawaiRaw) === normalize("PPPK")
+      ? extractGolonganPPPK(row.golonganPangkatRaw)
+      : extractGolonganCode(row.golonganPangkatRaw);
   if (!extracted) {
     return {
       issue: {
@@ -484,14 +490,14 @@ type SatuJabatanTambahanTerurai = {
   role: { kode: string };
   unit?: { kode: string };
   prodi?: { kode: string };
-  status: "Plt" | "Pjs";
+  status: "Plt" | "Pjs" | "Definitif";
 };
 
 function uraiSatuJabatanTambahan(mentah: string, master: MasterCache): SatuJabatanTambahanTerurai | null {
   const { roleRaw, unit, prodi, sisaKosong, status } = pisahJabatanTambahanRaw(mentah, master);
   const role = exactMatch(master.jabatanTambahanRole, (r) => r.namaRole, roleRaw);
-  if (!role || (!sisaKosong && !unit && !prodi) || !status) return null;
-  return { role: { kode: role.kode }, unit, prodi, status };
+  if (!role || (!sisaKosong && !unit && !prodi)) return null;
+  return { role: { kode: role.kode }, unit, prodi, status: status ?? "Definitif" };
 }
 
 /**
@@ -499,11 +505,9 @@ function uraiSatuJabatanTambahan(mentah: string, master: MasterCache): SatuJabat
  * slot/bulan, lihat nominatif_bulanan_jabatan_tambahan). Cari SEMUA titik " dan " di teks (bisa
  * lebih dari satu, termasuk yang cuma bagian dari nama resmi seperti "Fakultas Ekonomi dan
  * Bisnis") dan coba tiap titik sebagai kandidat batas pemisah - HANYA diterima kalau KEDUA belah
- * pihak lengkap terurai sendiri-sendiri (role+target+status Plt/Pjs EKSPLISIT ada di masing-
- * masing bagian, bukan cuma di salah satu), supaya nama resmi yang kebetulan mengandung "dan"
- * tidak akan pernah salah terpotong (belah yang salah otomatis gagal terurai, jadi dicoba titik
- * "dan" berikutnya). Status pengangkatan SENGAJA disyaratkan eksplisit di kedua bagian (bukan
- * lewat kamus) - kamus koreksi cuma mengenal 1 slot per baris, bukan pasangan.
+ * pihak lengkap terurai sendiri-sendiri (role+target ketemu di masing-masing bagian, bukan cuma
+ * salah satu), supaya nama resmi yang kebetulan mengandung "dan" tidak akan pernah salah
+ * terpotong (belah yang salah otomatis gagal terurai, jadi dicoba titik "dan" berikutnya).
  */
 function cobaPecahDuaJabatanTambahan(
   raw: string,
@@ -524,9 +528,11 @@ function cobaPecahDuaJabatanTambahan(
 
 /**
  * Jabatan Tambahan opsional - kosong di data sumber = tidak menjabat, bukan error. Akademisi
- * Luar UM tidak pernah punya jabatan tambahan struktural. Status Pengangkatan (Definitif/Plt/
- * Pjs) TIDAK PERNAH punya sinyal di data sumber sama sekali - satu-satunya jalan sukses tanpa
- * review manual adalah lewat kamus koreksi yang sudah pernah diisi admin sebelumnya.
+ * Luar UM tidak pernah punya jabatan tambahan struktural. Status Pengangkatan: kalau teksnya
+ * diawali "Plt."/"Pjs." eksplisit, itu SINYAL LANGSUNG dipakai apa adanya; kalau tidak ada
+ * awalan itu sama sekali, DIANGGAP "Definitif" (keputusan user - status Plt/Pjs di SIMPEGA
+ * praktiknya SELALU ditulis eksplisit di sumber kalau memang berlaku, jadi ketiadaan awalan itu
+ * adalah sinyal yang cukup kuat, bukan sekadar data yang hilang).
  */
 export function resolveJabatanTambahan(
   row: RawNominatifRow,
@@ -559,27 +565,15 @@ export function resolveJabatanTambahan(
   // pun (mis. "Rektor", "Ketua Senat"), itu memang jabatan level Universitas yang tidak
   // punya/butuh target, bukan kegagalan pencarian.
   if (role && (sisaKosong || unit || prodi)) {
-    // Role & unit/prodi ketemu. Kalau teksnya diawali "Plt."/"Pjs." eksplisit, itu SINYAL
-    // LANGSUNG status pengangkatan - langsung sukses tanpa review. Kalau tidak ada awalan itu,
-    // status TETAP tidak diasumsikan "Definitif" diam-diam - selalu perlu sekali resolusi manual
-    // (lalu diingat) sebelum bisa auto-resolve di bulan berikutnya.
-    if (status) {
-      return {
-        slots: [
-          {
-            jabatanTambahanRoleKode: role.kode,
-            unitAsalKode: unit?.kode ?? null,
-            programStudiKode: prodi?.kode ?? null,
-            statusPengangkatan: status,
-          },
-        ],
-      };
-    }
     return {
-      issue: {
-        alasan: "JabatanTambahanTidakDikenali",
-        detail: `Jabatan Tambahan "${row.jabatanTambahanRaw}" cocok ke role & unit/prodi, tapi Status Pengangkatan (Definitif/Plt/Pjs) tidak tersedia di data sumber - pilih manual sekali lalu centang "ingat".`,
-      },
+      slots: [
+        {
+          jabatanTambahanRoleKode: role.kode,
+          unitAsalKode: unit?.kode ?? null,
+          programStudiKode: prodi?.kode ?? null,
+          statusPengangkatan: status ?? "Definitif",
+        },
+      ],
     };
   }
 

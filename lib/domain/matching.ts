@@ -80,6 +80,22 @@ export function extractGolonganCode(raw: string): string | null {
   return `${romawi.toUpperCase()}/${huruf.toLowerCase()}`;
 }
 
+const ROMAWI_GOLONGAN_PPPK = [
+  "I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII",
+];
+
+/**
+ * PPPK pakai skala "Jenjang" I-XVII (angka romawi POLOS, tanpa "/huruf" spt golongan PNS) -
+ * ditulis di data sumber sbg teks seperti "-, X" (bagian sebelum koma placeholder kosong utk
+ * kolom PNS). Nilai ini DIPERCAYA langsung dari sumber (bukan dihitung ulang dari pendidikan -
+ * jenjang riil PPPK juga mempertimbangkan masa kerja, bukan cuma pendidikan, jadi menghitung
+ * ulang berisiko salah dibanding memakai apa yang sudah ditentukan HR di file sumber).
+ */
+export function extractGolonganPPPK(raw: string): string | null {
+  const bagianTerakhir = raw.split(",").pop()?.trim().toUpperCase() ?? "";
+  return ROMAWI_GOLONGAN_PPPK.includes(bagianTerakhir) ? bagianTerakhir : null;
+}
+
 /** Cocokkan "Arsiparis Madya" ke master {jabatanPokok:"Arsiparis", jenjang:"Madya"}. */
 export function matchJabatanFungsionalTendik<T extends { jabatanPokok: string; jenjang: string }>(
   list: T[],
