@@ -405,6 +405,60 @@ const ALIAS_SINGKATAN_FAKULTAS: Record<string, string> = {
 };
 
 /**
+ * Alias nama-panjang/singkatan-lama ke nama resmi di master, utk institusi yang sudah GANTI
+ * status/singkatan tapi teks sumber masih pakai versi lama - dikonfirmasi dari 82 baris Jabatan
+ * Tambahan yang tadinya tidak cocok master (lihat riwayat commit): "Satuan Pengawasan
+ * Internal"/"Satuan Penjaminan Mutu" adalah nama lama sebelum naik status jadi "Badan", BPUDA/LPPP/
+ * LPPM singkatan resmi yang sumber kadang tulis, dan 2 nama Direktorat yang di sumber kadang hilang
+ * atau nambah kata "Perencanaan," dibanding nama resmi masternya.
+ */
+const PRODI_PENDIDIKAN_NON_FORMAL = "S2 Pendidikan Non Formal dan Program Studi S3 Pendidikan Non Formal";
+
+const ALIAS_NAMA_LENGKAP: Record<string, string> = {
+  "upt satuan pengawasan internal": "Badan Pengawasan Internal",
+  "upt satuan penjaminan mutu": "Badan Penjaminan Mutu",
+  "badan pengembangan usaha dan dana abadi": "BPUDA",
+  lppp: "Lembaga Pengembangan Pendidikan dan Pembelajaran",
+  lppm: "Lembaga Penelitian dan Pengabdian Kepada Masyarakat",
+  "direktorat data dan informasi, pemeringkatan, hubungan masyarakat, dan kerja sama":
+    "Direktorat Perencanaan, Data dan Informasi, Pemeringkatan, Hubungan Masyarakat, dan Kerja Sama",
+  "direktorat perencanaan, sumber daya manusia, dan keuangan": "Direktorat Sumber Daya Manusia dan Keuangan",
+};
+
+/**
+ * Role yang namanya SENDIRI sudah unik menempel sebagian nama unit resminya (mis. master role
+ * "Kepala Sub Direktorat Kesejahteraan" - bukan generik "Kepala Sub Direktorat" + target, tapi
+ * sudah 1:1 dengan 1 unit tertentu: "Sub Direktorat Kesejahteraan, Kewirausahaan, Karir dan
+ * Alumni"). Sisa teks setelah role macam ini SELALU cuma lanjutan nama resmi yang sama atau
+ * konteks induk (tidak pernah target lain) - jadi begitu role ini ketemu, target sudah pasti,
+ * tidak perlu cocokkan sisa sama sekali. Dibatasi HANYA ke kode role yang benar-benar terbukti
+ * berperilaku begini dari 82 baris di atas, bukan ditebak untuk seluruh 79 role master.
+ */
+const ROLE_KE_UNIT_TETAP: Record<string, string> = {
+  "JBT-10": "UA-044", // Kepala Seksi Akuntansi dan Pelaporan Keuangan -> Seksi Akuntansi dan Pelaporan Keuangan
+  "JBT-11": "UA-045", // Kepala Seksi Anggaran dan Perpajakan -> Seksi Anggaran dan Perpajakan
+  "JBT-34": "UA-068", // Kepala Sub Direktorat Hubungan Masyarakat dan Kerja Sama Direktorat Perencanaan -> Sub Direktorat Hubungan Masyarakat dan Kerja Sama
+  "JBT-35": "UA-069", // Kepala Sub Direktorat Kesejahteraan -> Sub Direktorat Kesejahteraan, Kewirausahaan, Karir dan Alumni
+  "JBT-38": "UA-072", // Kepala Sub Direktorat Minat -> Sub Direktorat Minat, Bakat, dan Penalaran
+  "JBT-43": "UA-176", // Kepala Subdit Data dan Informasi -> Sub Direktorat Data dan Informasi
+  "JBT-44": "UA-075", // Kepala Subdit Pemeringkatan -> Sub Direktorat Pemeringkatan
+};
+
+/**
+ * Fallback KHUSUS pola "Bidang X pada <Unit Resmi>" / "Bidang X pada <Unit Resmi>" - "Bidang X"
+ * di sini cuma deskripsi tugas spesifik orangnya (mis. "Anggota SPI Bidang Keuangan"), BUKAN nama
+ * unit resmi tersendiri, jadi tidak akan pernah ketemu di master. Ambil bagian SETELAH kata
+ * "pada" TERAKHIR (supaya aman dari "Bidang X, Y pada Z" yang ada koma sebelum "pada") dan
+ * cocokkan itu saja ke Unit Asal.
+ */
+function cariUnitAtauProdiDenganPadaSuffix(sisa: string, master: MasterCache): UnitAtauProdi | undefined {
+  const idx = sisa.lastIndexOf(" pada ");
+  if (idx === -1) return undefined;
+  const target = sisa.slice(idx + " pada ".length).trim();
+  return target ? cariUnitAtauProdi(target, master) : undefined;
+}
+
+/**
  * Cocokkan sisa teks ke Unit Asal ATAU Program Studi - exact match dulu (persis sama persis,
  * termasuk lewat alias singkatan fakultas di atas), fallback ke sisa yang DIAWALI KATA UTUH
  * nama unit/prodi (mis. sisa "D4 Tata Boga Fakultas Vokasi" vs master prodi "D4 Tata Boga" -
@@ -414,7 +468,7 @@ const ALIAS_SINGKATAN_FAKULTAS: Record<string, string> = {
  * PALING PANJANG (paling spesifik).
  */
 function cariUnitAtauProdi(sisa: string, master: MasterCache): UnitAtauProdi | undefined {
-  const sisaSetelahAlias = normalize(ALIAS_SINGKATAN_FAKULTAS[sisa] ?? sisa);
+  const sisaSetelahAlias = normalize(ALIAS_SINGKATAN_FAKULTAS[sisa] ?? ALIAS_NAMA_LENGKAP[sisa] ?? sisa);
 
   type Kandidat = { kode: string; namaNorm: string; tipe: "unit" | "prodi" };
   const semua: Kandidat[] = [
@@ -423,7 +477,14 @@ function cariUnitAtauProdi(sisa: string, master: MasterCache): UnitAtauProdi | u
   ];
   let terbaik: Kandidat | undefined;
   for (const k of semua) {
-    const cocok = k.namaNorm === sisaSetelahAlias || sisaSetelahAlias.startsWith(`${k.namaNorm} `);
+    // Batas kata setelah nama unit/prodi persis biasanya spasi (lanjut kalimat), tapi kadang
+    // sumber taruh koma/titik dua langsung (mis. "Seksi Data, Direktorat ..." - nama fakultas
+    // induk ditempel setelah tanda baca, bukan spasi) - keduanya dianggap batas kata yang valid.
+    const cocok =
+      k.namaNorm === sisaSetelahAlias ||
+      sisaSetelahAlias.startsWith(`${k.namaNorm} `) ||
+      sisaSetelahAlias.startsWith(`${k.namaNorm},`) ||
+      sisaSetelahAlias.startsWith(`${k.namaNorm}:`);
     if (!cocok) continue;
     if (!terbaik || k.namaNorm.length > terbaik.namaNorm.length) terbaik = k;
   }
@@ -476,6 +537,45 @@ function cariUnitAtauProdiDenganAliasPeran(
 }
 
 /**
+ * Master Program Studi TIDAK konsisten menamai jenjang - kadang "S2 <Nama>"/"S3 <Nama>", kadang
+ * "<Nama> Program Magister"/"<Nama> Program Doktor" (dua-duanya dipakai untuk prodi berbeda,
+ * lihat prisma/seed-data/programStudi.json), sedangkan teks sumber SELALU pakai gaya "<Nama>
+ * Program Magister"/"<Nama> Program Doktor". Fallback ini menyamakan kedua gaya penulisan itu
+ * (pisahkan {jenjang, nama dasar}, lalu bandingkan nama dasarnya) supaya prodi yang di master
+ * kebetulan ditulis gaya "S2/S3" tetap ketemu.
+ */
+function kanonikProdi(nama: string): { jenjang: "S2" | "S3" | null; dasar: string } {
+  const n = normalize(nama);
+  if (n.startsWith("s2 ")) return { jenjang: "S2", dasar: n.slice(3) };
+  if (n.startsWith("s3 ")) return { jenjang: "S3", dasar: n.slice(3) };
+  if (n.endsWith(" program magister")) return { jenjang: "S2", dasar: n.slice(0, -" program magister".length) };
+  if (n.endsWith(" program doktor")) return { jenjang: "S3", dasar: n.slice(0, -" program doktor".length) };
+  return { jenjang: null, dasar: n };
+}
+
+function cariProdiDenganKanonikJenjang(sisa: string, master: MasterCache): UnitAtauProdi | undefined {
+  // "Program Magister"/"Program Doktor" bisa muncul di TENGAH sisa (mis. "ilmu ekonomi program
+  // magister fakultas ekonomi dan bisnis" - fakultas induk menempel di belakang), jadi dicari
+  // sbg SUBSTRING, bukan cuma akhiran, lalu bagian sebelumnya jadi dasar pembanding.
+  const penanda: Array<{ frasa: string; jenjang: "S2" | "S3" }> = [
+    { frasa: " program magister", jenjang: "S2" },
+    { frasa: " program doktor", jenjang: "S3" },
+  ];
+  for (const { frasa, jenjang } of penanda) {
+    const idx = sisa.indexOf(frasa);
+    if (idx === -1) continue;
+    const dasar = sisa.slice(0, idx).trim();
+    if (!dasar) continue;
+    const cocok = master.programStudi.find((p) => {
+      const k = kanonikProdi(p.nama);
+      return k.jenjang === jenjang && k.dasar === dasar;
+    });
+    if (cocok) return { prodi: { kode: cocok.kode } };
+  }
+  return undefined;
+}
+
+/**
  * Raw "Jabatan Tambahan" menggabungkan nama role + unit/prodi dalam 1 sel TANPA pemisah yang
  * konsisten - kadang koma ("Kepala Sub Direktorat Layanan Pendidikan, Direktorat Pendidikan"),
  * kadang tanpa apa pun ("Dekan Fakultas Ilmu Sosial"). Jadi dicari lewat KANDIDAT AWALAN dari
@@ -498,23 +598,39 @@ export function pisahJabatanTambahanRaw(
   status: "Plt" | "Pjs" | null;
 } {
   const { sisaTeks, status } = ekstrakStatusPengangkatan(raw.trim());
-  // Master SELALU pakai singkatan "UPT" (mis. "UPT Layanan Pengadaan"), tapi sumber data sering
-  // menulis lengkap "Unit Pelaksana Teknis" - alias di level teks mentah supaya baik peran
-  // ("Kepala UPT") maupun nama unitnya sendiri konsisten cocok ke master.
-  const rawNorm = normalize(sisaTeks).replace(/\bunit pelaksana teknis\b/g, "upt");
+  // Master SELALU pakai singkatan "UPT" (mis. "UPT Layanan Pengadaan") dan "IPA" (mis.
+  // "Departemen Pendidikan IPA"), tapi sumber data sering menulis lengkap "Unit Pelaksana
+  // Teknis"/"Ilmu Pengetahuan Alam" - alias di level teks mentah supaya baik peran maupun nama
+  // unitnya sendiri konsisten cocok ke master.
+  const rawNorm = normalize(sisaTeks)
+    .replace(/\bunit pelaksana teknis\b/g, "upt")
+    .replace(/\bilmu pengetahuan alam\b/g, "ipa")
+    // "PTIK" singkatan "Pusat Teknologi Informasi dan Komunikasi" (nama resmi Unit Asal-nya
+    // selalu "UPT Pusat Teknologi Informasi dan Komunikasi") - sumber sering pakai singkatan ini.
+    .replace(/\bptik\b/g, "pusat teknologi informasi dan komunikasi")
+    // Master tulis "Departemen Bimbingan Konseling" (tanpa "dan"), sumber sering tulis lengkap
+    // "Bimbingan dan Konseling" - disamakan di sini.
+    .replace(/\bbimbingan dan konseling\b/g, "bimbingan konseling")
+    // Prodi "Pendidikan Luar Sekolah" sudah direbrand nasional jadi "Pendidikan Non Formal" -
+    // nama Departemen-nya di UM tetap pakai nama lama, tapi nama Prodi di master sudah pakai
+    // nama baru (PRD-099), jadi disamakan di sini supaya tetap ketemu.
+    .replace(/\bpendidikan luar sekolah program magister dan program doktor\b/g, normalize(PRODI_PENDIDIKAN_NON_FORMAL));
 
   const kandidatRole = master.jabatanTambahanRole
     .filter((r) => {
       const roleNorm = normalize(r.namaRole);
       if (!rawNorm.startsWith(roleNorm)) return false;
       const sisa = rawNorm.slice(roleNorm.length);
-      return sisa === "" || sisa.startsWith(" ") || sisa.startsWith(",");
+      return sisa === "" || sisa.startsWith(" ") || sisa.startsWith(",") || sisa.startsWith(":");
     })
     .sort((a, b) => b.namaRole.length - a.namaRole.length);
 
   for (const role of kandidatRole) {
     let sisa = rawNorm.slice(normalize(role.namaRole).length).trim();
-    if (sisa.startsWith(",") || sisa.startsWith("-")) sisa = sisa.slice(1).trim();
+    if (sisa.startsWith(",") || sisa.startsWith("-") || sisa.startsWith(":")) sisa = sisa.slice(1).trim();
+    // "Pembina Asrama Putra:"/"Pembina Asrama Putri:" - penanda jenis kelamin penghuni asrama,
+    // bukan bagian dari nama unit asramanya sendiri.
+    sisa = sisa.replace(/^(putra|putri)\s*:?\s*/, "");
     if (!sisa) return { roleRaw: role.namaRole, sisaKosong: true, status };
     // Nama institusi sendiri ditempel di belakang role level-Universitas (mis. "Rektor
     // Universitas Negeri Malang", "Sekretaris Universitas Negeri Malang") - redundan (cuma ada
@@ -522,11 +638,22 @@ export function pisahJabatanTambahanRaw(
     if (sisa === normalize("Universitas Negeri Malang")) {
       return { roleRaw: role.namaRole, sisaKosong: true, status };
     }
+    // "Wakil Rektor I (Bidang Pendidikan, Kemahasiswaan, dan Alumni)" - keterangan bidang tugas
+    // dalam kurung, bukan target unit/prodi terpisah (jabatan level Rektorat tidak butuh target).
+    if (sisa.startsWith("(") && sisa.endsWith(")")) {
+      return { roleRaw: role.namaRole, sisaKosong: true, status };
+    }
+    // Sebagian role di master SUDAH unik menempel sebagian nama unit resminya (lihat
+    // ROLE_KE_UNIT_TETAP) - begitu role ini ketemu, target sudah pasti tanpa perlu cocokkan sisa.
+    const unitTetap = ROLE_KE_UNIT_TETAP[role.kode];
+    if (unitTetap) return { roleRaw: role.namaRole, unit: { kode: unitTetap }, sisaKosong: false, status };
 
     const match =
       cariUnitAtauProdi(sisa, master) ??
       cariUnitAtauProdiDenganKataKategoriRole(role.namaRole, sisa, master) ??
-      cariUnitAtauProdiDenganAliasPeran(role.namaRole, sisa, master);
+      cariUnitAtauProdiDenganAliasPeran(role.namaRole, sisa, master) ??
+      cariProdiDenganKanonikJenjang(sisa, master) ??
+      cariUnitAtauProdiDenganPadaSuffix(sisa, master);
     if (match && "unit" in match) return { roleRaw: role.namaRole, unit: match.unit, sisaKosong: false, status };
     if (match && "prodi" in match) return { roleRaw: role.namaRole, prodi: match.prodi, sisaKosong: false, status };
   }

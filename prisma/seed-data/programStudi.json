@@ -775,5 +775,15 @@
     "jenjang": "Program Magister, Program Doktor",
     "unitAsalKode": "UA-021",
     "statusValidasi": "Draft"
-  }
+  },
+  { "kode": "PRD-112", "nama": "S3 Ilmu Ekonomi", "jenjang": "S3", "unitAsalKode": "UA-019", "statusValidasi": "Draft" },
+  { "kode": "PRD-113", "nama": "Psikologi Program Magister", "jenjang": "Program Magister", "unitAsalKode": "UA-025", "statusValidasi": "Draft" },
+  { "kode": "PRD-114", "nama": "S1 Pendidikan Tata Busana", "jenjang": "S1", "unitAsalKode": "UA-027", "statusValidasi": "Draft" },
+  { "kode": "PRD-115", "nama": "S1 Pendidikan Kimia", "jenjang": "S1", "unitAsalKode": "UA-024", "statusValidasi": "Draft" },
+  { "kode": "PRD-116", "nama": "S1 Pendidikan Fisika", "jenjang": "S1", "unitAsalKode": "UA-024", "statusValidasi": "Draft" },
+  { "kode": "PRD-117", "nama": "S1 Pendidikan Bahasa Mandarin", "jenjang": "S1", "unitAsalKode": "UA-026", "statusValidasi": "Draft" },
+  { "kode": "PRD-118", "nama": "S2 Keguruan Bahasa Arab", "jenjang": "S2", "unitAsalKode": "UA-026", "statusValidasi": "Draft" },
+  { "kode": "PRD-119", "nama": "Akuntansi Program Magister", "jenjang": "Program Magister", "unitAsalKode": "UA-019", "statusValidasi": "Draft" },
+  { "kode": "PRD-120", "nama": "Pendidikan Sejarah Program Magister", "jenjang": "Program Magister", "unitAsalKode": "UA-022", "statusValidasi": "Draft" },
+  { "kode": "PRD-121", "nama": "S1 Matematika", "jenjang": "S1", "unitAsalKode": "UA-024", "statusValidasi": "Draft" }
 ]
