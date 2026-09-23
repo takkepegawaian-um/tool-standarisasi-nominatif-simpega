@@ -9,10 +9,13 @@ import { processUploadedNominatif } from "./actions";
 
 const now = new Date();
 
+const MAX_UPLOAD_ATTEMPTS = 3;
+
 export default function UploadPage() {
   const [error, setError] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<"idle" | "mengunggah" | "memproses">("idle");
   const [progress, setProgress] = useState(0);
+  const [attempt, setAttempt] = useState(1);
   const formRef = useRef<HTMLFormElement>(null);
 
   const pending = status !== "idle";
@@ -35,20 +38,43 @@ export default function UploadPage() {
       return;
     }
 
-    try {
-      setStatus("mengunggah");
-      setProgress(0);
-      const blob = await upload(file.name, file, {
-        access: "public",
-        handleUploadUrl: "/api/upload-token",
-        // Wajib multipart: default-nya SATU request PUT besar - di koneksi lambat/tidak stabil
-        // (kasus nyata: kantor SDM), sekali putus di menit ke-2 langsung "Failed to fetch" dan
-        // seluruh 4,5MB harus diulang dari nol. Multipart memecah jadi beberapa bagian yang
-        // di-retry independen kalau gagal, jauh lebih tahan koneksi jelek.
-        multipart: true,
-        onUploadProgress: ({ percentage }) => setProgress(percentage),
-      });
+    setStatus("mengunggah");
+    setProgress(0);
 
+    // TIDAK pakai multipart: true - endpoint kontrolnya (vercel.com/api/blob/mpu) punya bug CORS
+    // yang belum diperbaiki Vercel di produksi (dikonfirmasi laporan publik developer lain, bukan
+    // masalah dari kode kita). Jalur single-PUT (default) PUT langsung ke domain storage, tidak
+    // lewat endpoint bermasalah itu - tapi jadi tidak ada retry bawaan utk 1 request besar, jadi
+    // retry manual di sini utk tahan koneksi kantor yang lambat/kadang putus.
+    let blob: Awaited<ReturnType<typeof upload>> | null = null;
+    let lastErr: unknown;
+    for (let i = 1; i <= MAX_UPLOAD_ATTEMPTS; i++) {
+      setAttempt(i);
+      setProgress(0);
+      try {
+        blob = await upload(file.name, file, {
+          access: "public",
+          handleUploadUrl: "/api/upload-token",
+          onUploadProgress: ({ percentage }) => setProgress(percentage),
+        });
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (i < MAX_UPLOAD_ATTEMPTS) await new Promise((r) => setTimeout(r, 2000 * i));
+      }
+    }
+
+    if (!blob) {
+      setError(
+        lastErr instanceof Error
+          ? `Gagal mengunggah setelah ${MAX_UPLOAD_ATTEMPTS} percobaan: ${lastErr.message}`
+          : "Gagal mengunggah file."
+      );
+      setStatus("idle");
+      return;
+    }
+
+    try {
       setStatus("memproses");
       const result = await processUploadedNominatif(bulan, tahun, blob.url, file.name);
       if (result?.error) {
@@ -56,7 +82,7 @@ export default function UploadPage() {
         setStatus("idle");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal mengunggah file.");
+      setError(err instanceof Error ? err.message : "Gagal memproses file.");
       setStatus("idle");
     }
   }
@@ -132,7 +158,10 @@ export default function UploadPage() {
                 style={{ width: `${Math.max(progress, 2)}%` }}
               />
             </div>
-            <p className="mt-1 text-xs text-slate-500">{Math.round(progress)}% terunggah</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {Math.round(progress)}% terunggah
+              {attempt > 1 ? ` (percobaan ke-${attempt} dari ${MAX_UPLOAD_ATTEMPTS})` : ""}
+            </p>
           </div>
         )}
 
