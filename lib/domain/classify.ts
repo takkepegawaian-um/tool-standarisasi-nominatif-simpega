@@ -598,13 +598,16 @@ export function pisahJabatanTambahanRaw(
   status: "Plt" | "Pjs" | null;
 } {
   const { sisaTeks, status } = ekstrakStatusPengangkatan(raw.trim());
-  // Master SELALU pakai singkatan "UPT" (mis. "UPT Layanan Pengadaan") dan "IPA" (mis.
-  // "Departemen Pendidikan IPA"), tapi sumber data sering menulis lengkap "Unit Pelaksana
-  // Teknis"/"Ilmu Pengetahuan Alam" - alias di level teks mentah supaya baik peran maupun nama
-  // unitnya sendiri konsisten cocok ke master.
+  // Master SELALU pakai singkatan "UPT" (mis. "UPT Layanan Pengadaan") dan "Departemen
+  // Pendidikan IPA", tapi sumber data sering menulis lengkap "Unit Pelaksana Teknis"/"Pendidikan
+  // Ilmu Pengetahuan Alam" - alias di level teks mentah supaya baik peran maupun nama unitnya
+  // sendiri konsisten cocok ke master. SENGAJA dibatasi ke frasa "Pendidikan Ilmu Pengetahuan
+  // Alam" saja (bukan "Ilmu Pengetahuan Alam" polos) - "Fakultas Matematika dan Ilmu Pengetahuan
+  // Alam" (nama resmi FMIPA) justru TETAP pakai ejaan lengkap di master, jadi tidak boleh ikut
+  // ke-alias (regresi yang sempat terjadi: Dekan/Wakil Dekan FMIPA jadi tidak ketemu master).
   const rawNorm = normalize(sisaTeks)
     .replace(/\bunit pelaksana teknis\b/g, "upt")
-    .replace(/\bilmu pengetahuan alam\b/g, "ipa")
+    .replace(/\bpendidikan ilmu pengetahuan alam\b/g, "pendidikan ipa")
     // "PTIK" singkatan "Pusat Teknologi Informasi dan Komunikasi" (nama resmi Unit Asal-nya
     // selalu "UPT Pusat Teknologi Informasi dan Komunikasi") - sumber sering pakai singkatan ini.
     .replace(/\bptik\b/g, "pusat teknologi informasi dan komunikasi")
