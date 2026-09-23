@@ -23,5 +23,10 @@
     "kode": "DSN-04",
     "nama": "Guru Besar (Profesor)",
     "urutanJenjang": 4
+  },
+  {
+    "kode": "DSN-99",
+    "nama": "Belum Diketahui (Perlu Verifikasi Manual)",
+    "urutanJenjang": 99
   }
 ]

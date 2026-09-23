@@ -893,5 +893,10 @@
     "kode": "UA-179",
     "nama": "Departemen Seni dan Desain",
     "unitIndukKode": "UI-17"
+  },
+  {
+    "kode": "UA-180",
+    "nama": "Unit Kerja Belum Diketahui (Perlu Verifikasi Manual)",
+    "unitIndukKode": "UI-38"
   }
 ]

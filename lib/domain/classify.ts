@@ -281,7 +281,7 @@ export function resolveJabatan(
         return {
           issue: {
             alasan: "JabatanKosong",
-            detail: "Kolom Jabatan Fungsional kosong total di file sumber - bukan kegagalan pencocokan, isi manual dari sumber lain (mis. arsip/unit terkait).",
+            detail: "Kolom Jabatan Fungsional kosong total di file sumber - bukan kegagalan pencocokan. Cari dari sumber lain (arsip/unit terkait) kalau ada; kalau memang belum ada infonya sama sekali, pilih \"Belum Diketahui (Perlu Verifikasi Manual)\" supaya orang ini tetap tercatat di laporan bulan ini.",
           },
         };
       }
@@ -316,7 +316,7 @@ export function resolveJabatan(
       return {
         issue: {
           alasan: "JabatanKosong",
-          detail: "Kolom Jabatan Fungsional kosong total di file sumber - bukan kegagalan pencocokan, isi manual dari sumber lain (mis. arsip/unit terkait).",
+          detail: "Kolom Jabatan Fungsional kosong total di file sumber - bukan kegagalan pencocokan. Cari dari sumber lain (arsip/unit terkait) kalau ada; kalau memang belum ada infonya sama sekali, pilih \"Belum Diketahui (Perlu Verifikasi Manual)\" supaya orang ini tetap tercatat di laporan bulan ini.",
         },
       };
     }
@@ -350,7 +350,7 @@ export function resolveUnitKerja(
     return {
       issue: {
         alasan: "UnitKerjaKosong",
-        detail: "Kolom Unit Kerja (Subag/Unit Kerja Induk/Direktorat-Fakultas/Unit Statistik) kosong total di file sumber - bukan kegagalan pencocokan, isi manual dari sumber lain (mis. arsip/unit terkait).",
+        detail: "Kolom Unit Kerja (Subag/Unit Kerja Induk/Direktorat-Fakultas/Unit Statistik) kosong total di file sumber - bukan kegagalan pencocokan. Cari dari sumber lain (arsip/unit terkait) kalau ada; kalau memang belum ada infonya sama sekali, pilih \"Unit Kerja Belum Diketahui (Perlu Verifikasi Manual)\" supaya orang ini tetap tercatat di laporan bulan ini.",
       },
     };
   }

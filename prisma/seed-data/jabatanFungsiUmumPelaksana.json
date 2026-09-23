@@ -38,5 +38,9 @@
   {
     "kode": "UMM-10",
     "nama": "Teknisi Laboratorium"
+  },
+  {
+    "kode": "UMM-99",
+    "nama": "Belum Diketahui (Perlu Verifikasi Manual)"
   }
 ]
