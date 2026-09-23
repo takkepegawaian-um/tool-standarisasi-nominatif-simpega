@@ -888,5 +888,10 @@
     "kode": "UA-178",
     "nama": "Universitas",
     "unitIndukKode": "UI-38"
+  },
+  {
+    "kode": "UA-179",
+    "nama": "Departemen Seni dan Desain",
+    "unitIndukKode": "UI-17"
   }
 ]
