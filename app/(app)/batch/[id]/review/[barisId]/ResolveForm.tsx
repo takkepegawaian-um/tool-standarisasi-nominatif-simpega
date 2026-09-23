@@ -7,6 +7,7 @@ import { STATUS_PENGANGKATAN } from "@/lib/constants";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
 import { resolveBarisBermasalah, type ResolveState } from "./actions";
+import { SearchableSelect } from "./SearchableSelect";
 
 type Master = {
   statusKepegawaian: { kode: string; nama: string }[];
@@ -222,39 +223,32 @@ export function ResolveForm({
 
           <div>
             <label className="block text-sm font-medium text-slate-700">Jabatan Fungsional / Fungsi</label>
-            <select
+            <SearchableSelect
+              key={kelompok}
               name="jabatanPilihan"
               defaultValue={prefill.jabatanPilihan ?? ""}
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-            >
-              <option value="">Pilih jabatan...</option>
-              {kelompok === "Dosen" ? (
-                <optgroup label="Jabatan Fungsional Dosen">
-                  {master.jabatanFungsionalDosen.map((j) => (
-                    <option key={j.kode} value={`DOSEN:${j.kode}`}>
-                      {j.nama}
-                    </option>
-                  ))}
-                </optgroup>
-              ) : (
-                <>
-                  <optgroup label="Jabatan Fungsional Tendik">
-                    {master.jabatanFungsionalTendik.map((j) => (
-                      <option key={j.kode} value={`TENDIK:${j.kode}`}>
-                        {j.jenjang === "-" ? j.jabatanPokok : `${j.jabatanPokok} ${j.jenjang}`}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Fungsi Umum Pelaksana">
-                    {master.jabatanFungsiUmumPelaksana.map((j) => (
-                      <option key={j.kode} value={`UMUM:${j.kode}`}>
-                        {j.nama}
-                      </option>
-                    ))}
-                  </optgroup>
-                </>
-              )}
-            </select>
+              placeholder="Cari jabatan fungsional/fungsi..."
+              options={
+                kelompok === "Dosen"
+                  ? master.jabatanFungsionalDosen.map((j) => ({
+                      value: `DOSEN:${j.kode}`,
+                      label: j.nama,
+                      group: "Jabatan Fungsional Dosen",
+                    }))
+                  : [
+                      ...master.jabatanFungsionalTendik.map((j) => ({
+                        value: `TENDIK:${j.kode}`,
+                        label: j.jenjang === "-" ? j.jabatanPokok : `${j.jabatanPokok} ${j.jenjang}`,
+                        group: "Jabatan Fungsional Tendik",
+                      })),
+                      ...master.jabatanFungsiUmumPelaksana.map((j) => ({
+                        value: `UMUM:${j.kode}`,
+                        label: j.nama,
+                        group: "Fungsi Umum Pelaksana",
+                      })),
+                    ]
+              }
+            />
             <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
               <input type="checkbox" name="ingatJabatan" />
               Ingat jabatan ini untuk teks Jabatan Fungsional mentah yang sama bulan berikutnya
@@ -279,46 +273,37 @@ export function ResolveForm({
             <div className="mt-3 space-y-3 rounded-md border border-slate-200 p-3">
               <div>
                 <label className="block text-sm font-medium text-slate-700">Jabatan Tambahan</label>
-                <select
+                <SearchableSelect
+                  key={kelompok}
                   name="jabatanTambahanRoleKode"
                   defaultValue={prefill.jabatanTambahanRoleKode ?? ""}
-                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Pilih jabatan tambahan...</option>
-                  {master.jabatanTambahanRole
+                  placeholder="Cari jabatan tambahan..."
+                  options={master.jabatanTambahanRole
                     .filter((r) => r.berlakuUntuk === "Keduanya" || r.berlakuUntuk === kelompok)
-                    .map((r) => (
-                      <option key={r.kode} value={r.kode}>
-                        {r.namaRole}
-                      </option>
-                    ))}
-                </select>
+                    .map((r) => ({ value: r.kode, label: r.namaRole }))}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">
                   Unit/Prodi Jabatan Tambahan
                 </label>
-                <select
+                <SearchableSelect
                   name="jabatanTambahanTargetKode"
                   defaultValue={prefill.jabatanTambahanTargetKode ?? ""}
-                  className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                >
-                  <option value="">Pilih unit/prodi...</option>
-                  <optgroup label="Unit Asal">
-                    {master.unitAsal.map((u) => (
-                      <option key={u.kode} value={`UNIT:${u.kode}`}>
-                        {u.nama}
-                      </option>
-                    ))}
-                  </optgroup>
-                  <optgroup label="Program Studi">
-                    {master.programStudi.map((p) => (
-                      <option key={p.kode} value={`PRODI:${p.kode}`}>
-                        {p.nama}
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
+                  placeholder="Cari unit/prodi..."
+                  options={[
+                    ...master.unitAsal.map((u) => ({
+                      value: `UNIT:${u.kode}`,
+                      label: u.nama,
+                      group: "Unit Asal",
+                    })),
+                    ...master.programStudi.map((p) => ({
+                      value: `PRODI:${p.kode}`,
+                      label: p.nama,
+                      group: "Program Studi",
+                    })),
+                  ]}
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">Status Pengangkatan</label>
@@ -350,18 +335,12 @@ export function ResolveForm({
 
       <div>
         <label className="block text-sm font-medium text-slate-700">Unit Kerja</label>
-        <select
+        <SearchableSelect
           name="unitAsalKode"
           defaultValue={prefill.unitAsalKode ?? ""}
-          className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-        >
-          <option value="">Pilih unit kerja...</option>
-          {master.unitAsal.map((u) => (
-            <option key={u.kode} value={u.kode}>
-              {u.nama}
-            </option>
-          ))}
-        </select>
+          placeholder="Cari unit kerja..."
+          options={master.unitAsal.map((u) => ({ value: u.kode, label: u.nama }))}
+        />
         <label className="mt-2 flex items-center gap-2 text-xs text-slate-500">
           <input type="checkbox" name="ingatUnit" />
           Ingat unit kerja ini untuk nilai mentah yang sama bulan berikutnya
