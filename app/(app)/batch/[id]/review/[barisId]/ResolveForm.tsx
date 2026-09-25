@@ -40,6 +40,16 @@ type Prefill = {
   statusPengangkatan2: string | null;
 };
 
+/**
+ * "Tenaga Pengajar" adalah istilah RESMI di master SIMPEGA (jangan diganti - export ke SIMPEGA
+ * akan ditolak kalau beda, lihat ALIAS_JABATAN_FUNGSIONAL_DOSEN di classify.ts), tapi istilah
+ * yang sudah biasa dipakai sehari-hari di sini adalah "Tenaga Dosen" - jadi CUMA label yang
+ * tampil di dropdown ini yang diganti, kode & nilai yang disimpan/di-export tetap apa adanya.
+ */
+function labelJabatanDosen(nama: string): string {
+  return nama === "Tenaga Pengajar" ? "Tenaga Dosen" : nama;
+}
+
 function toDateInputValue(iso: string | null): string {
   if (!iso) return "";
   return iso.slice(0, 10);
@@ -277,7 +287,7 @@ export function ResolveForm({
                 kelompok === "Dosen"
                   ? master.jabatanFungsionalDosen.map((j) => ({
                       value: `DOSEN:${j.kode}`,
-                      label: j.nama,
+                      label: labelJabatanDosen(j.nama),
                       group: "Jabatan Fungsional Dosen",
                     }))
                   : [
