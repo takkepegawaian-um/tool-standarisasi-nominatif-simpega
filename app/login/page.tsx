@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
@@ -30,9 +31,7 @@ export default async function LoginPage({
   return (
     <main className="flex min-h-screen items-center justify-center bg-sidebar px-4">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-        <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent-gold text-sm font-bold text-sidebar">
-          K1
-        </div>
+        <Image src="/logo.webp" alt="Logo KDSI SDM" width={56} height={56} className="h-14 w-14 object-contain" />
         <h1 className="mt-4 text-lg font-semibold text-slate-900">KDS1</h1>
         <p className="mt-1 text-sm text-slate-500">Standarisasi nominatif — masuk sebagai admin SDM</p>
 

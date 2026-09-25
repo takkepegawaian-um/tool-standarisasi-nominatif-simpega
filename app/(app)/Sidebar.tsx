@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -91,8 +92,8 @@ export function Sidebar({
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-sidebar text-white">
       <div className="flex items-center gap-3 px-5 py-5">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-gold text-sm font-bold text-sidebar">
-          K1
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white p-1">
+          <Image src="/logo.webp" alt="Logo KDSI SDM" width={40} height={40} className="h-full w-full object-contain" />
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-bold leading-tight">KDS1</p>

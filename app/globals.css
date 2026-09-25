@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f9fafb;
-  --foreground: #111827;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
@@ -11,14 +11,15 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 
-  /* Token desain diselaraskan dengan SIMPEGA UM (lihat PROMPT_Claude_Code_Restyle_UI_Nominatif.md) */
-  --color-sidebar: #101a2b;
-  --color-sidebar-lighter: #1a2436;
-  --color-sidebar-active: #22314d;
-  --color-sidebar-muted: #8a94a8;
-  --color-accent-gold: #c9a226;
-  --color-accent-green: #175c30;
-  --color-page: #f9fafb;
+  /* Palet KDS1 (Seksi KDSI SDM UM) - Deep Navy + Platinum Silver, lihat logo di public/logo.webp */
+  --color-sidebar: #002b49;
+  --color-sidebar-lighter: #001f35;
+  --color-sidebar-active: #001f35;
+  --color-sidebar-muted: #e2e8f0;
+  --color-accent-gold: #f59e0b;
+  --color-accent-green: #10b981;
+  --color-accent-red: #ef4444;
+  --color-page: #f8fafc;
 }
 
 /* SENGAJA tidak ada @media (prefers-color-scheme: dark) - desainnya tema tetap (sidebar navy +
