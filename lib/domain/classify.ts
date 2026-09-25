@@ -492,6 +492,7 @@ const ROLE_KE_UNIT_TETAP: Record<string, string> = {
   "JBT-38": "UA-072", // Kepala Sub Direktorat Minat -> Sub Direktorat Minat, Bakat, dan Penalaran
   "JBT-43": "UA-176", // Kepala Subdit Data dan Informasi -> Sub Direktorat Data dan Informasi
   "JBT-44": "UA-075", // Kepala Subdit Pemeringkatan -> Sub Direktorat Pemeringkatan
+  "JBT-18": "UA-175", // Kepala Seksi Kinerja -> Seksi Kinerja, Disiplin, dan Sistem Informasi SDM
 };
 
 /**
