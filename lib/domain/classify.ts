@@ -147,6 +147,23 @@ export function resolveKelompok(
   master: MasterCache,
   kamus: KamusMap
 ): { kelompok: KelompokPegawai } | { issue: Issue } {
+  const diingat = dariKamus(kamus, "Klasifikasi", kunciKlasifikasi(row));
+  if (diingat && ["Dosen", "Tendik", "Akademisi Luar UM"].includes(diingat)) {
+    return { kelompok: diingat as KelompokPegawai };
+  }
+
+  // Status Pegawai yang menandakan Akademisi Luar UM (Praktisi/AP/dst) SELALU menang, bahkan
+  // kalau kolom "Kelompok Jabatan" bilang lain - dikonfirmasi user (Sep 2026): tarikan SIMPEGA
+  // format baru (REKAP_PEGAWAI) salah isi Kelompok Jabatan="Dosen" utk 359 baris berstatus
+  // "Praktisi"/"AP"/"Akademisi Luar UM" (literal), padahal kebijakan yg berlaku tetap
+  // menghitung mereka Akademisi Luar UM - jadi dicek DULU sebelum percaya kolom itu.
+  if (matchStatusAgainstKategori(master.kategoriAkademisiLuar, (k) => k.nama, row.statusPegawaiRaw)) {
+    return { kelompok: "Akademisi Luar UM" };
+  }
+  if (normalize(row.statusPegawaiRaw) === normalize("Akademisi Luar UM")) {
+    return { kelompok: "Akademisi Luar UM" };
+  }
+
   if (row.kelompokJabatanRaw) {
     const literal = row.kelompokJabatanRaw.trim();
     if (["Dosen", "Tendik", "Akademisi Luar UM"].includes(literal)) {
@@ -154,17 +171,6 @@ export function resolveKelompok(
     }
   }
 
-  const diingat = dariKamus(kamus, "Klasifikasi", kunciKlasifikasi(row));
-  if (diingat && ["Dosen", "Tendik", "Akademisi Luar UM"].includes(diingat)) {
-    return { kelompok: diingat as KelompokPegawai };
-  }
-
-  if (matchStatusAgainstKategori(master.kategoriAkademisiLuar, (k) => k.nama, row.statusPegawaiRaw)) {
-    return { kelompok: "Akademisi Luar UM" };
-  }
-  if (normalize(row.statusPegawaiRaw) === normalize("Akademisi Luar UM")) {
-    return { kelompok: "Akademisi Luar UM" };
-  }
   if (prefixOrExactMatch(master.kategoriAkademisiLuar, (k) => k.nama, row.jenisPegawaiRaw)) {
     return { kelompok: "Akademisi Luar UM" };
   }
