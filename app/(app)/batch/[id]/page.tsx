@@ -4,8 +4,17 @@ import { notFound } from "next/navigation";
 import { ALASAN_LABEL, namaBulan, type AlasanBarisBermasalah } from "@/lib/constants";
 import { prisma } from "@/lib/db";
 
-export default async function BatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
+import { HapusPegawaiButton } from "./HapusPegawaiButton";
+
+export default async function BatchDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ q?: string }>;
+}) {
   const { id } = await params;
+  const { q } = await searchParams;
 
   const batch = await prisma.uploadBatch.findUnique({
     where: { id },
@@ -20,6 +29,22 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ id
   });
 
   const sisaMenunggu = breakdown.reduce((acc, b) => acc + b._count._all, 0);
+
+  const kataKunci = q?.trim() ?? "";
+  const hasilPencarian = kataKunci
+    ? await prisma.nominatifBulanan.findMany({
+        where: {
+          uploadBatchId: id,
+          OR: [
+            { pegawaiNip: { contains: kataKunci } },
+            { nama: { contains: kataKunci, mode: "insensitive" } },
+          ],
+        },
+        include: { jenisPegawai: true, unitAsal: true },
+        orderBy: { nama: "asc" },
+        take: 30,
+      })
+    : [];
 
   return (
     <div className="space-y-6">
@@ -81,6 +106,62 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ id
           </a>
         </div>
       )}
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4">
+        <p className="text-sm font-medium text-slate-700">Cari & Kelola Pegawai (bulan ini)</p>
+        <p className="mt-1 text-xs text-slate-500">
+          Cari berdasarkan NIP atau nama untuk menghapus 1 baris salah input/duplikat - HANYA
+          menghapus dari {namaBulan(batch.bulan)} {batch.tahun}, bulan lain tidak terpengaruh.
+        </p>
+        <form method="GET" className="mt-3 flex gap-2">
+          <input
+            type="text"
+            name="q"
+            defaultValue={kataKunci}
+            placeholder="NIP atau nama..."
+            className="block w-full max-w-sm rounded-md border border-slate-300 px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            className="rounded-md bg-sidebar px-4 py-2 text-sm font-medium text-white hover:bg-sidebar-lighter"
+          >
+            Cari
+          </button>
+        </form>
+
+        {kataKunci && (
+          <div className="mt-4 overflow-x-auto">
+            {hasilPencarian.length === 0 ? (
+              <p className="text-sm text-slate-500">Tidak ada pegawai yang cocok dengan &quot;{kataKunci}&quot; di bulan ini.</p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
+                    <th className="py-2 pr-3">NIP</th>
+                    <th className="py-2 pr-3">Nama</th>
+                    <th className="py-2 pr-3">Jenis Pegawai</th>
+                    <th className="py-2 pr-3">Unit Kerja</th>
+                    <th className="py-2 pr-3"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hasilPencarian.map((n) => (
+                    <tr key={n.id} className="border-b border-slate-100">
+                      <td className="py-2 pr-3 font-mono text-xs">{n.pegawaiNip}</td>
+                      <td className="py-2 pr-3">{n.nama}</td>
+                      <td className="py-2 pr-3">{n.jenisPegawai.nama}</td>
+                      <td className="py-2 pr-3">{n.unitAsal.nama}</td>
+                      <td className="py-2 pr-3">
+                        <HapusPegawaiButton batchId={batch.id} nominatifBulananId={n.id} nama={n.nama} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
 
       <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm">
         <summary className="cursor-pointer font-medium text-slate-700">
