@@ -26,7 +26,8 @@ export type JabatanTambahanSlot = {
 export type ResolvedNominatif = {
   nama: string;
   jenisKelamin: "L" | "P";
-  tanggalLahir: Date;
+  // Opsional sejak format tarikan SIMPEGA Okt 2026 (REKAP_PEGAWAI) tidak pernah menyertakannya.
+  tanggalLahir: Date | null;
   pendidikanTerakhir: string | null;
   agama: string | null;
   jenisPegawaiKode: string;
@@ -905,9 +906,6 @@ export function classifyRow(
     issues.push({ alasan: "Lainnya", detail: `Jenis Kelamin mentah "${row.jenisKelaminRaw}" bukan L/P.` });
   }
 
-  if (!row.tanggalLahir) {
-    issues.push({ alasan: "Lainnya", detail: "Tanggal Lahir kosong/tidak valid di data sumber." });
-  }
   if (!row.tanggalMasuk) {
     issues.push({ alasan: "Lainnya", detail: "Tanggal Masuk (dipakai sebagai TMT) kosong/tidak valid di data sumber." });
   }
@@ -921,7 +919,7 @@ export function classifyRow(
     data: {
       nama,
       jenisKelamin: jenisKelamin as "L" | "P",
-      tanggalLahir: row.tanggalLahir as Date,
+      tanggalLahir: row.tanggalLahir,
       pendidikanTerakhir: row.pendidikanRaw.trim() || null,
       agama: row.agamaRaw.trim() || null,
       jenisPegawaiKode: kodeJenisPegawai(master, kelompok),

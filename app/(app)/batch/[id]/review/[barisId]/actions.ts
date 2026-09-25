@@ -46,7 +46,6 @@ export async function resolveBarisBermasalah(
   const agama = String(formData.get("agama") ?? "").trim() || null;
 
   if (!nama) return { error: "Nama wajib diisi." };
-  if (!tanggalLahir) return { error: "Tanggal lahir tidak valid." };
   if (!tanggalMulaiKerja) return { error: "Tanggal mulai kerja (TMT) tidak valid." };
   // Akademisi Luar UM tidak punya field ini di form (statusnya otomatis "PTT", lihat bawah) -
   // jadi wajib-diisi cuma berlaku utk Dosen/Tendik yang memang menampilkan dropdown-nya.

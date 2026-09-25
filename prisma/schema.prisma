@@ -237,7 +237,7 @@ model NominatifBulanan {
   tahun                       Int
   nama                        String
   jenisKelamin                String // L / P
-  tanggalLahir                DateTime
+  tanggalLahir                DateTime? // opsional sejak format tarikan SIMPEGA Okt 2026 tidak pernah menyertakannya
   pendidikanTerakhir          String?
   agama                       String?
   jenisPegawaiKode            String

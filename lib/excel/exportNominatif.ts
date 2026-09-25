@@ -10,8 +10,8 @@ const TEMPLATE_PATH = path.join(
 );
 const SHEET_NAME = "Nominatif Bulanan";
 
-function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+function fmtDate(d: Date | null): string {
+  return d ? d.toISOString().slice(0, 10) : "";
 }
 
 function namaJabatan(row: {
