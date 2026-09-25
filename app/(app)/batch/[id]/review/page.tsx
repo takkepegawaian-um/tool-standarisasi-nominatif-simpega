@@ -5,6 +5,8 @@ import { ALASAN_LABEL, namaBulan, type AlasanBarisBermasalah } from "@/lib/const
 import { prisma } from "@/lib/db";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
+import { KecualikanButton } from "./KecualikanButton";
+
 export default async function ReviewListPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -57,12 +59,15 @@ export default async function ReviewListPage({ params }: { params: Promise<{ id:
                       {ALASAN_LABEL[b.alasanUtama as AlasanBarisBermasalah] ?? b.alasanUtama}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link
-                        href={`/batch/${id}/review/${b.id}`}
-                        className="rounded-md bg-sidebar px-3 py-1.5 text-xs font-medium text-white hover:bg-sidebar-lighter"
-                      >
-                        Selesaikan
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        <KecualikanButton batchId={id} barisBermasalahId={b.id} nip={b.nip} />
+                        <Link
+                          href={`/batch/${id}/review/${b.id}`}
+                          className="rounded-md bg-sidebar px-3 py-1.5 text-xs font-medium text-white hover:bg-sidebar-lighter"
+                        >
+                          Selesaikan
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 );
