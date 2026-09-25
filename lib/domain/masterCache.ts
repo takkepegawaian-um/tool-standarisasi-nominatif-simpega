@@ -64,3 +64,18 @@ export async function loadNipTerdaftar(): Promise<NipTerdaftar> {
   const rows = await prisma.pegawai.findMany({ select: { nip: true } });
   return new Set(rows.map((r) => r.nip));
 }
+
+export const JENIS_FIELD_PEGAWAI_DIKECUALIKAN_PERMANEN = "PegawaiDikecualikanPermanen";
+
+/** NIP yang ditandai admin sbg "jangan tampilkan lagi selamanya" (mis. sudah pensiun tapi
+ *  file sumber SIMPEGA masih menyertakannya tiap bulan) - di-skip TOTAL dari importBatch,
+ *  tidak masuk arsip maupun daftar review, di bulan manapun berikutnya. Disimpan lewat
+ *  KamusKoreksi (jenisField ini) supaya bisa dilihat/dihapus lagi dari halaman /kamus kalau
+ *  ternyata keliru, tanpa perlu tabel/halaman terpisah. */
+export async function loadNipDikecualikanPermanen(): Promise<Set<string>> {
+  const rows = await prisma.kamusKoreksi.findMany({
+    where: { jenisField: JENIS_FIELD_PEGAWAI_DIKECUALIKAN_PERMANEN },
+    select: { kunciMentah: true },
+  });
+  return new Set(rows.map((r) => r.kunciMentah));
+}

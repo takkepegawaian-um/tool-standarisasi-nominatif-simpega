@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { JENIS_FIELD_PEGAWAI_DIKECUALIKAN_PERMANEN } from "@/lib/domain/masterCache";
 
 export type KecualikanState = { error?: string };
 
@@ -11,12 +12,17 @@ export type KecualikanState = { error?: string };
  * Kecualikan 1 baris bermasalah dari arsip (status "Dikecualikan") - dipakai utk baris yang
  * genuinely tidak bisa diselesaikan (mis. nama & jenis kelamin kosong total di file sumber,
  * tidak ada jejaknya di bulan manapun) - beda dari "Selesaikan" yang butuh data lengkap.
+ *
+ * Kalau "permanen" dicentang (mis. NIP ini ternyata sudah pensiun tapi file sumber SIMPEGA
+ * masih menyertakannya tiap bulan), NIP-nya JUGA ditambahkan ke daftar "dikecualikan permanen"
+ * (lewat KamusKoreksi) - importBatch bulan-bulan berikutnya otomatis skip NIP ini total, tidak
+ * perlu dikecualikan manual berulang tiap bulan.
  */
 export async function kecualikanBarisBermasalah(
   batchId: string,
   barisBermasalahId: string,
   _prevState: KecualikanState,
-  _formData: FormData
+  formData: FormData
 ): Promise<KecualikanState> {
   const session = await auth();
   if (!session?.user?.id) return { error: "Sesi login sudah habis, silakan masuk ulang." };
@@ -24,6 +30,8 @@ export async function kecualikanBarisBermasalah(
   const baris = await prisma.barisBermasalah.findUnique({ where: { id: barisBermasalahId } });
   if (!baris || baris.uploadBatchId !== batchId) return { error: "Baris tidak ditemukan di batch ini." };
   if (baris.status !== "Menunggu") return { error: "Baris ini sudah diproses sebelumnya." };
+
+  const permanen = formData.get("permanen") === "on";
 
   await prisma.$transaction(async (tx) => {
     await tx.barisBermasalah.update({
@@ -35,10 +43,24 @@ export async function kecualikanBarisBermasalah(
         aksi: "KecualikanBarisBermasalah",
         entitas: "BarisBermasalah",
         entitasId: barisBermasalahId,
-        detail: { nip: baris.nip },
+        detail: { nip: baris.nip, permanen },
         dilakukanOlehId: session.user!.id,
       },
     });
+    if (permanen) {
+      await tx.kamusKoreksi.upsert({
+        where: {
+          jenisField_kunciMentah: { jenisField: JENIS_FIELD_PEGAWAI_DIKECUALIKAN_PERMANEN, kunciMentah: baris.nip },
+        },
+        create: {
+          jenisField: JENIS_FIELD_PEGAWAI_DIKECUALIKAN_PERMANEN,
+          kunciMentah: baris.nip,
+          nilaiResolusi: "Dikecualikan permanen",
+          dibuatOlehId: session.user!.id,
+        },
+        update: {},
+      });
+    }
     const sisaMenunggu = await tx.barisBermasalah.count({ where: { uploadBatchId: batchId, status: "Menunggu" } });
     await tx.uploadBatch.update({
       where: { id: batchId },

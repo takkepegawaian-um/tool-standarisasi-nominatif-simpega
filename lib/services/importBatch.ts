@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { classifyRow, pilihAlasanUtama } from "@/lib/domain/classify";
 import type { ResolvedNominatif } from "@/lib/domain/classify";
-import { loadKamusMap, loadMasterCache, loadNipTerdaftar } from "@/lib/domain/masterCache";
+import { loadKamusMap, loadMasterCache, loadNipDikecualikanPermanen, loadNipTerdaftar } from "@/lib/domain/masterCache";
 import { parseRawNominatif } from "@/lib/excel/parseRawNominatif";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
@@ -48,8 +48,18 @@ export async function importBatch(
   tahun: number,
   diunggahOlehId: string
 ): Promise<ImportBatchResult> {
-  const { rows, petaKolomTerdeteksi } = await parseRawNominatif(fileBuffer);
-  const [master, kamus, nipTerdaftar] = await Promise.all([loadMasterCache(), loadKamusMap(), loadNipTerdaftar()]);
+  const { rows: semuaRows, petaKolomTerdeteksi } = await parseRawNominatif(fileBuffer);
+  const [master, kamus, nipTerdaftar, nipDikecualikanPermanen] = await Promise.all([
+    loadMasterCache(),
+    loadKamusMap(),
+    loadNipTerdaftar(),
+    loadNipDikecualikanPermanen(),
+  ]);
+
+  // NIP yang ditandai admin "jangan tampilkan lagi selamanya" (mis. sudah pensiun tapi file
+  // sumber SIMPEGA masih menyertakannya) - di-skip TOTAL di sini, tidak ikut dihitung sbg baris
+  // apapun (bukan berhasil, bukan juga perlu-review) - lihat loadNipDikecualikanPermanen.
+  const rows = semuaRows.filter((r) => !nipDikecualikanPermanen.has(r.nip));
 
   // Klasifikasi semua baris dulu di memori (tidak ada query DB sama sekali di sini) - hasilnya
   // baru ditulis ke DB lewat beberapa query BULK saja, terlepas dari jumlah baris. Sebelumnya

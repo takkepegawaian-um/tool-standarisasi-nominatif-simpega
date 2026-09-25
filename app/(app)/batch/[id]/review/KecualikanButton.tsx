@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { kecualikanBarisBermasalah, type KecualikanState } from "./kecualikanActions";
@@ -29,21 +29,28 @@ export function KecualikanButton({
 }) {
   const boundAction = kecualikanBarisBermasalah.bind(null, batchId, barisBermasalahId);
   const [state, formAction] = useActionState<KecualikanState, FormData>(boundAction, {});
+  const [permanen, setPermanen] = useState(false);
 
   return (
     <form
       action={formAction}
       onSubmit={(e) => {
-        if (
-          !confirm(
-            `Kecualikan baris NIP ${nip} dari arsip bulan ini? Tindakan ini tidak bisa dibatalkan (pakai ini kalau baris genuinely tidak bisa diselesaikan, mis. nama kosong total tanpa jejak di bulan manapun).`
-          )
-        ) {
-          e.preventDefault();
-        }
+        const pesan = permanen
+          ? `Kecualikan NIP ${nip} PERMANEN? NIP ini akan otomatis di-skip total (tidak masuk arsip maupun review) di SEMUA upload bulan berikutnya - pakai ini kalau memang sudah pensiun/data sampah, bukan sekadar kurang lengkap bulan ini. Bisa dibatalkan lagi lewat halaman Kamus Koreksi.`
+          : `Kecualikan baris NIP ${nip} dari arsip bulan ini? Tindakan ini tidak bisa dibatalkan (pakai ini kalau baris genuinely tidak bisa diselesaikan, mis. nama kosong total tanpa jejak di bulan manapun).`;
+        if (!confirm(pesan)) e.preventDefault();
       }}
-      className="inline"
+      className="inline-flex items-center gap-2"
     >
+      <label className="flex items-center gap-1 text-xs text-slate-500">
+        <input
+          type="checkbox"
+          name="permanen"
+          checked={permanen}
+          onChange={(e) => setPermanen(e.target.checked)}
+        />
+        Permanen (pensiun/sampah)
+      </label>
       <TombolKecualikan />
       {state.error && <p className="mt-1 text-xs text-red-600">{state.error}</p>}
     </form>
