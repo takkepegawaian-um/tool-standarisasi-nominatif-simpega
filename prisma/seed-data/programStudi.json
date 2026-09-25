@@ -785,5 +785,8 @@
   { "kode": "PRD-118", "nama": "S2 Keguruan Bahasa Arab", "jenjang": "S2", "unitAsalKode": "UA-026", "statusValidasi": "Draft" },
   { "kode": "PRD-119", "nama": "Akuntansi Program Magister", "jenjang": "Program Magister", "unitAsalKode": "UA-019", "statusValidasi": "Draft" },
   { "kode": "PRD-120", "nama": "Pendidikan Sejarah Program Magister", "jenjang": "Program Magister", "unitAsalKode": "UA-022", "statusValidasi": "Draft" },
-  { "kode": "PRD-121", "nama": "S1 Matematika", "jenjang": "S1", "unitAsalKode": "UA-024", "statusValidasi": "Draft" }
+  { "kode": "PRD-121", "nama": "S1 Matematika", "jenjang": "S1", "unitAsalKode": "UA-024", "statusValidasi": "Draft" },
+  { "kode": "PRD-122", "nama": "S3 Ekonomi Pembangunan", "jenjang": "S3", "unitAsalKode": "UA-019", "statusValidasi": "Draft" },
+  { "kode": "PRD-123", "nama": "S1 Pendidikan Agama Islam", "jenjang": "S1", "unitAsalKode": "UA-026", "statusValidasi": "Draft" },
+  { "kode": "PRD-124", "nama": "S2 PJJ Pendidikan Bahasa Indonesia", "jenjang": "PJJ, S2", "unitAsalKode": "UA-026", "statusValidasi": "Draft" }
 ]

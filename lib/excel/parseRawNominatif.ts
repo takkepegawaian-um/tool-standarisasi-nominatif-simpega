@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 
 import { buildColumnMap, type ColumnMap } from "./columnMap";
+import { detectRekapPegawaiSheet, parseRekapPegawai } from "./parseRekapPegawai";
 import { ColumnMappingError, type ParseRawNominatifResult, type RawNominatifRow } from "./types";
 
 const SHEET_NAME = "Nominatif";
@@ -84,13 +85,16 @@ function extractRow(sheet: ExcelJS.Worksheet, rowNumber: number, map: ColumnMap)
     direktoratFakultasRaw: cellStr(row, map.direktoratFakultas),
     unitStatistikRaw: cellStr(row, map.unitStatistik),
     tanggalMasuk: cellDate(row, map.tanggalMasuk),
+    unitKerjaJabatanTambahanRaw: "", // tidak ada di format lama ini
   };
 }
 
-export async function parseRawNominatif(buffer: Buffer): Promise<ParseRawNominatifResult> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
-
+/**
+ * Format "Nominatif" LAMA (sheet bernama persis "Nominatif", header multi-blok dgn kolom
+ * duplikat spt TMT x3) - dipertahankan apa adanya utk kompatibilitas file lama, TIDAK dipakai
+ * lagi utk tarikan SIMPEGA baru (lihat parseRekapPegawai.ts & dispatcher di bawah).
+ */
+function parseNominatifLama(workbook: ExcelJS.Workbook): ParseRawNominatifResult {
   const sheet = workbook.getWorksheet(SHEET_NAME);
   if (!sheet) {
     throw new ColumnMappingError(`Sheet "${SHEET_NAME}" tidak ditemukan di file yang diupload.`);
@@ -110,4 +114,28 @@ export async function parseRawNominatif(buffer: Buffer): Promise<ParseRawNominat
   const petaKolomTerdeteksi: Record<string, number | null> = { ...map };
 
   return { rows, totalBarisSheet: lastRow - headerRowNumber, petaKolomTerdeteksi };
+}
+
+/**
+ * Dispatcher: coba format "Nominatif" lama dulu (sheet persis bernama "Nominatif"), kalau tidak
+ * ada baru coba format REKAP_PEGAWAI baru (dideteksi dari header, bukan nama sheet - nama sheet
+ * tarikan ini generik "Worksheet"). Kalau dua-duanya tidak cocok, GAGAL KERAS dgn pesan jelas -
+ * konsisten dgn kebijakan "tidak menebak diam-diam" utk perubahan format yang belum dikenali.
+ */
+export async function parseRawNominatif(buffer: Buffer): Promise<ParseRawNominatifResult> {
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer as unknown as ExcelJS.Buffer);
+
+  if (workbook.getWorksheet(SHEET_NAME)) {
+    return parseNominatifLama(workbook);
+  }
+
+  const sheetBaru = detectRekapPegawaiSheet(workbook);
+  if (sheetBaru) {
+    return parseRekapPegawai(sheetBaru);
+  }
+
+  throw new ColumnMappingError(
+    `Format file tidak dikenali - tidak ada sheet "${SHEET_NAME}" (format Nominatif lama) maupun sheet dengan kolom-kolom REKAP_PEGAWAI (format baru). Periksa manual sebelum lanjut.`
+  );
 }

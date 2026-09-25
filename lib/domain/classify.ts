@@ -808,6 +808,27 @@ export function resolveJabatanTambahan(
     };
   }
 
+  // Format tarikan baru (REKAP_PEGAWAI, Okt 2026+) punya kolom "Unit Kerja Jabatan Tambahan"
+  // TERPISAH dari teks role-nya - role sudah ketemu tapi sisa teks gabungan gagal dicocokkan,
+  // coba kolom terpisah ini sbg fallback TERAKHIR (bukan yang pertama - kolom ini kadang cuma
+  // berisi unit kerja UTAMA orangnya, bukan target spesifik, mis. utk role "Pembina Asrama" -
+  // makanya cuma dipakai kalau ekstraksi dari teks gabungan sendiri sudah gagal total).
+  if (role && !sisaKosong && !unit && !prodi && row.unitKerjaJabatanTambahanRaw.trim()) {
+    const viaKolomTerpisah = cariUnitAtauProdi(normalize(row.unitKerjaJabatanTambahanRaw), master);
+    if (viaKolomTerpisah) {
+      return {
+        slots: [
+          {
+            jabatanTambahanRoleKode: role.kode,
+            unitAsalKode: "unit" in viaKolomTerpisah ? viaKolomTerpisah.unit.kode : null,
+            programStudiKode: "prodi" in viaKolomTerpisah ? viaKolomTerpisah.prodi.kode : null,
+            statusPengangkatan: status ?? "Definitif",
+          },
+        ],
+      };
+    }
+  }
+
   // Gagal sebagai 1 jabatan utuh - coba pecah jadi 2 ("role1 ... dan role2 ..."), lihat
   // cobaPecahDuaJabatanTambahan. Cuma diterima kalau KEDUA belah pihak lengkap (termasuk status
   // eksplisit) sendiri-sendiri, jadi aman dari nama resmi yang kebetulan mengandung kata "dan".
