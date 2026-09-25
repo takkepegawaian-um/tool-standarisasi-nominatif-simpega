@@ -393,5 +393,15 @@
     "kode": "JBT-79",
     "namaRole": "Wakil Rektor IV",
     "berlakuUntuk": "Keduanya"
-  }
+  },
+  { "kode": "JBT-80", "namaRole": "Pembina Asrama Putra: Asrama Mawar, Kampus III UM", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-81", "namaRole": "Sekretaris merangkap Bendahara Tim Pengelola Sertifikasi Dosen", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-82", "namaRole": "Ketua Tim Pengelola Sertifikasi Dosen", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-83", "namaRole": "Kepala Divisi HKI dan Kerjasama Industri Direktorat Inovasi", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-84", "namaRole": "Ketua Bidang Pengawasan Pengadaan Barang dan Jasa", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-85", "namaRole": "Ketua Bidang Pengawasan Tata Kelola dan Manajemen Resiko", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-86", "namaRole": "Ketua Bidang Pengawasan SDM", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-87", "namaRole": "Ketua Bidang Pengawasan SDM, Sarpras dan Aset", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-88", "namaRole": "Ketua Bidang Pengawasan Keuangan", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-89", "namaRole": "Kepala Seksi Kinerja, Disiplin, dan Sistem Informasi Sumber Daya Manusia", "berlakuUntuk": "Tendik" }
 ]

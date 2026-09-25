@@ -473,6 +473,7 @@ const ALIAS_NAMA_LENGKAP: Record<string, string> = {
   "direktorat data dan informasi, pemeringkatan, hubungan masyarakat, dan kerja sama":
     "Direktorat Perencanaan, Data dan Informasi, Pemeringkatan, Hubungan Masyarakat, dan Kerja Sama",
   "direktorat perencanaan, sumber daya manusia, dan keuangan": "Direktorat Sumber Daya Manusia dan Keuangan",
+  "direktorat sumber daya manusia, dan keuangan": "Direktorat Sumber Daya Manusia dan Keuangan",
 };
 
 /**
