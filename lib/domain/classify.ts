@@ -232,8 +232,12 @@ export function resolveGolongan(
   kamus: KamusMap,
   statusKategori: string
 ): { kode: string | null } | { issue: Issue } {
-  if (statusKategori !== "ASN") return { kode: null };
-
+  // SEBELUMNYA baris ini langsung skip total (return null) kalau bukan ASN - TERBUKTI SALAH:
+  // PTNA (Non-ASN) ternyata SELALU punya golongan asli di file sumber (37/37 sampel, format
+  // identik PNS "Penata, III/c"), CPTNA kadang juga (2/94). Sekarang golongan SELALU dicoba
+  // diekstrak dulu utk SEMUA status - baru kalau gagal, ASN tetap wajib (flag review), sedangkan
+  // Non-ASN dianggap wajar kosong (mis. Praktisi/Akademisi Luar UM/PTT yang kolomnya memang
+  // selalu cuma tanda koma) - tidak ikut kena flag review palsu.
   const diingat = dariKamus(kamus, "Golongan", kunciGolongan(row));
   if (diingat && master.golongan.some((g) => g.kode === diingat)) return { kode: diingat };
 
@@ -244,6 +248,7 @@ export function resolveGolongan(
       ? extractGolonganPPPK(row.golonganPangkatRaw)
       : extractGolonganCode(row.golonganPangkatRaw);
   if (!extracted) {
+    if (statusKategori !== "ASN") return { kode: null };
     return {
       issue: {
         alasan: "GolonganTidakDikenali",
@@ -253,6 +258,7 @@ export function resolveGolongan(
   }
   const found = master.golongan.find((g) => g.kode === extracted);
   if (!found) {
+    if (statusKategori !== "ASN") return { kode: null };
     return {
       issue: {
         alasan: "GolonganTidakDikenali",
