@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tool Standardisasi Nominatif — SIMPEGA UM",
+  title: "KDS1 — Standarisasi nominatif",
   description: "Standardisasi & klasifikasi nominatif pegawai bulanan SIMPEGA UM",
 };
 

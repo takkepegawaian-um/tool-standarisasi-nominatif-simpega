@@ -255,9 +255,7 @@ export function ResolveForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700">
-              Golongan (kosongkan untuk Non-ASN)
-            </label>
+            <label className="block text-sm font-medium text-slate-700">Golongan</label>
             <select
               name="golonganKode"
               defaultValue={prefill.golonganKode ?? ""}

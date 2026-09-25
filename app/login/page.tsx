@@ -31,12 +31,10 @@ export default async function LoginPage({
     <main className="flex min-h-screen items-center justify-center bg-sidebar px-4">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
         <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-accent-gold text-sm font-bold text-sidebar">
-          TN
+          K1
         </div>
-        <h1 className="mt-4 text-lg font-semibold text-slate-900">
-          Tool Standardisasi Nominatif
-        </h1>
-        <p className="mt-1 text-sm text-slate-500">SIMPEGA UM — masuk sebagai admin SDM</p>
+        <h1 className="mt-4 text-lg font-semibold text-slate-900">KDS1</h1>
+        <p className="mt-1 text-sm text-slate-500">Standarisasi nominatif — masuk sebagai admin SDM</p>
 
         <form action={login} className="mt-6 space-y-4">
           <div>

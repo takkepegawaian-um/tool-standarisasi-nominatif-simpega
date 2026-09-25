@@ -92,11 +92,11 @@ export function Sidebar({
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-sidebar text-white">
       <div className="flex items-center gap-3 px-5 py-5">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent-gold text-sm font-bold text-sidebar">
-          TN
+          K1
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold leading-tight">Tool Standardisasi Nominatif</p>
-          <p className="truncate text-xs leading-tight text-sidebar-muted">SIMPEGA UM</p>
+          <p className="truncate text-sm font-bold leading-tight">KDS1</p>
+          <p className="truncate text-xs leading-tight text-sidebar-muted">Standarisasi nominatif</p>
         </div>
       </div>
 
