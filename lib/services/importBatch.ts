@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { classifyRow, pilihAlasanUtama } from "@/lib/domain/classify";
 import type { ResolvedNominatif } from "@/lib/domain/classify";
-import { loadKamusMap, loadMasterCache } from "@/lib/domain/masterCache";
+import { loadKamusMap, loadMasterCache, loadNipTerdaftar } from "@/lib/domain/masterCache";
 import { parseRawNominatif } from "@/lib/excel/parseRawNominatif";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
@@ -49,7 +49,7 @@ export async function importBatch(
   diunggahOlehId: string
 ): Promise<ImportBatchResult> {
   const { rows, petaKolomTerdeteksi } = await parseRawNominatif(fileBuffer);
-  const [master, kamus] = await Promise.all([loadMasterCache(), loadKamusMap()]);
+  const [master, kamus, nipTerdaftar] = await Promise.all([loadMasterCache(), loadKamusMap(), loadNipTerdaftar()]);
 
   // Klasifikasi semua baris dulu di memori (tidak ada query DB sama sekali di sini) - hasilnya
   // baru ditulis ke DB lewat beberapa query BULK saja, terlepas dari jumlah baris. Sebelumnya
@@ -61,7 +61,7 @@ export async function importBatch(
   const barisBermasalahRows: BarisBermasalahRow[] = [];
 
   for (const row of rows) {
-    const result = classifyRow(row, master, kamus);
+    const result = classifyRow(row, master, kamus, nipTerdaftar);
     if (result.ok) {
       const { jabatanTambahan, ...nominatifData } = result.data;
       const id = randomUUID();

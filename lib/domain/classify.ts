@@ -1,7 +1,7 @@
 import type { AlasanBarisBermasalah, KelompokPegawai } from "@/lib/constants";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
-import type { KamusMap, MasterCache } from "./masterCache";
+import type { KamusMap, MasterCache, NipTerdaftar } from "./masterCache";
 import {
   exactMatch,
   extractGolonganCode,
@@ -281,13 +281,23 @@ const ALIAS_JABATAN_FUNGSIONAL_DOSEN: Record<string, string> = {
   "tenaga dosen": "Tenaga Pengajar",
 };
 
+/** Kode placeholder "Belum Diketahui (Perlu Verifikasi Manual)" - lihat seed-data terkait. */
+const JABATAN_DOSEN_BELUM_DIKETAHUI = "DSN-99";
+const JABATAN_FUNGSI_UMUM_BELUM_DIKETAHUI = "UMM-99";
+
 export function resolveJabatan(
   row: RawNominatifRow,
   master: MasterCache,
   kamus: KamusMap,
-  kelompok: KelompokPegawai
+  kelompok: KelompokPegawai,
+  nipTerdaftar: NipTerdaftar
 ): JabatanResolusi | { issue: Issue } {
   const kunci = kunciJabatan(row);
+  // Dosen/Tendik BARU (NIP belum pernah tercatat bulan manapun sebelumnya) dgn Jabatan
+  // Fungsional kosong - keputusan user: langsung "Belum Diketahui" otomatis, TIDAK usah nunggu
+  // direview manual dulu (beda dgn pegawai LAMA yang kolomnya kosong lagi - itu tetap direview,
+  // karena kemungkinan admin punya info spesifik dari SK/riwayat, lihat kunciPerNipJikaKosong).
+  const pegawaiBaruJabatanKosong = !row.jabatanFungsionalRaw.trim() && !nipTerdaftar.has(row.nip);
 
   if (kelompok === "Dosen") {
     const diingat = dariKamus(kamus, "JabatanFungsionalDosen", kunci);
@@ -305,6 +315,9 @@ export function resolveJabatan(
           : undefined;
       })();
     if (!dariMaster) {
+      if (pegawaiBaruJabatanKosong) {
+        return { jabatanFungsionalDosenKode: JABATAN_DOSEN_BELUM_DIKETAHUI, jabatanFungsionalTendikKode: null, jabatanFungsiUmumKode: null };
+      }
       if (!row.jabatanFungsionalRaw.trim()) {
         return {
           issue: {
@@ -330,6 +343,9 @@ export function resolveJabatan(
       matchJabatanFungsionalTendik(master.jabatanFungsionalTendik, row.jabatanFungsionalRaw);
     if (tendik) {
       return { jabatanFungsionalDosenKode: null, jabatanFungsionalTendikKode: tendik.kode, jabatanFungsiUmumKode: null };
+    }
+    if (pegawaiBaruJabatanKosong) {
+      return { jabatanFungsionalDosenKode: null, jabatanFungsionalTendikKode: null, jabatanFungsiUmumKode: JABATAN_FUNGSI_UMUM_BELUM_DIKETAHUI };
     }
 
     const diingatUmum = dariKamus(kamus, "FungsiUmumPelaksana", kunci);
@@ -813,7 +829,12 @@ function pilihAlasanUtama(issues: Issue[]): AlasanBarisBermasalah {
   return "Lainnya";
 }
 
-export function classifyRow(row: RawNominatifRow, master: MasterCache, kamus: KamusMap): ClassifyResult {
+export function classifyRow(
+  row: RawNominatifRow,
+  master: MasterCache,
+  kamus: KamusMap,
+  nipTerdaftar: NipTerdaftar
+): ClassifyResult {
   const issues: Issue[] = [];
 
   const kelompokResult = resolveKelompok(row, master, kamus);
@@ -848,7 +869,7 @@ export function classifyRow(row: RawNominatifRow, master: MasterCache, kamus: Ka
     }
   }
 
-  const jabatan = resolveJabatan(row, master, kamus, kelompok);
+  const jabatan = resolveJabatan(row, master, kamus, kelompok, nipTerdaftar);
   let jabatanFungsionalDosenKode: string | null = null;
   let jabatanFungsionalTendikKode: string | null = null;
   let jabatanFungsiUmumKode: string | null = null;

@@ -11,7 +11,7 @@ import {
   resolveStatusKepegawaian,
   resolveUnitKerja,
 } from "@/lib/domain/classify";
-import { loadKamusMap, loadMasterCache } from "@/lib/domain/masterCache";
+import { loadKamusMap, loadMasterCache, loadNipTerdaftar } from "@/lib/domain/masterCache";
 import { exactMatch } from "@/lib/domain/matching";
 import { prisma } from "@/lib/db";
 import type { RawNominatifRow } from "@/lib/excel/types";
@@ -41,7 +41,7 @@ export default async function ResolveRowPage({
     orderBy: [{ tahun: "desc" }, { bulan: "desc" }],
   });
 
-  const [master, kamus] = await Promise.all([loadMasterCache(), loadKamusMap()]);
+  const [master, kamus, nipTerdaftar] = await Promise.all([loadMasterCache(), loadKamusMap(), loadNipTerdaftar()]);
   const raw = baris.dataMentah as unknown as RawNominatifRow;
 
   const kelompokResult = resolveKelompok(raw, master, kamus);
@@ -65,7 +65,7 @@ export default async function ResolveRowPage({
   }
 
   if (prefillKelompok) {
-    const jabatan = resolveJabatan(raw, master, kamus, prefillKelompok);
+    const jabatan = resolveJabatan(raw, master, kamus, prefillKelompok, nipTerdaftar);
     if (!("issue" in jabatan)) {
       if (jabatan.jabatanFungsionalDosenKode) prefillJabatan = `DOSEN:${jabatan.jabatanFungsionalDosenKode}`;
       else if (jabatan.jabatanFungsionalTendikKode) prefillJabatan = `TENDIK:${jabatan.jabatanFungsionalTendikKode}`;
@@ -101,7 +101,10 @@ export default async function ResolveRowPage({
   let prefillJabatanTambahanRoleKode: string | null = null;
   let prefillJabatanTambahanTargetKode: string | null = null;
   let prefillStatusPengangkatan: string | null = null;
-  let catatanJabatanTambahanKedua: string | null = null;
+  let prefillAdaJabatanTambahanKedua = false;
+  let prefillJabatanTambahanRoleKode2: string | null = null;
+  let prefillJabatanTambahanTargetKode2: string | null = null;
+  let prefillStatusPengangkatan2: string | null = null;
 
   if (prefillKelompok && prefillKelompok !== "Akademisi Luar UM" && raw.jabatanTambahanRaw.trim()) {
     prefillAdaJabatanTambahan = true;
@@ -116,8 +119,14 @@ export default async function ResolveRowPage({
           : null;
       prefillStatusPengangkatan = slot.statusPengangkatan;
       if (slotKedua) {
-        const roleKedua = master.jabatanTambahanRole.find((r) => r.kode === slotKedua.jabatanTambahanRoleKode);
-        catatanJabatanTambahanKedua = `Sistem juga mendeteksi jabatan tambahan KEDUA secara otomatis ("${roleKedua?.namaRole ?? slotKedua.jabatanTambahanRoleKode}") dari teks mentah "${raw.jabatanTambahanRaw}" - form ini baru mendukung 1 slot, jadi kalau baris ini disimpan lewat sini, slot kedua itu TIDAK ikut tersimpan. Kalau memang ada 2 jabatan tambahan, upload ulang file aslinya supaya keduanya diproses otomatis tanpa lewat form ini.`;
+        prefillAdaJabatanTambahanKedua = true;
+        prefillJabatanTambahanRoleKode2 = slotKedua.jabatanTambahanRoleKode;
+        prefillJabatanTambahanTargetKode2 = slotKedua.unitAsalKode
+          ? `UNIT:${slotKedua.unitAsalKode}`
+          : slotKedua.programStudiKode
+            ? `PRODI:${slotKedua.programStudiKode}`
+            : null;
+        prefillStatusPengangkatan2 = slotKedua.statusPengangkatan;
       }
     } else {
       // Kamus belum tahu Status Pengangkatan-nya, tapi role & unit/prodi mungkin tetap bisa
@@ -177,12 +186,6 @@ export default async function ResolveRowPage({
         </p>
       )}
 
-      {catatanJabatanTambahanKedua && (
-        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          {catatanJabatanTambahanKedua}
-        </p>
-      )}
-
       <ResolveForm
         batchId={batchId}
         barisId={barisId}
@@ -198,6 +201,10 @@ export default async function ResolveRowPage({
           jabatanTambahanRoleKode: prefillJabatanTambahanRoleKode,
           jabatanTambahanTargetKode: prefillJabatanTambahanTargetKode,
           statusPengangkatan: prefillStatusPengangkatan,
+          adaJabatanTambahanKedua: prefillAdaJabatanTambahanKedua,
+          jabatanTambahanRoleKode2: prefillJabatanTambahanRoleKode2,
+          jabatanTambahanTargetKode2: prefillJabatanTambahanTargetKode2,
+          statusPengangkatan2: prefillStatusPengangkatan2,
         }}
         master={{
           statusKepegawaian: master.statusKepegawaian,

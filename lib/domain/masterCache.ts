@@ -54,3 +54,13 @@ export async function loadKamusMap(): Promise<KamusMap> {
   const rows = await prisma.kamusKoreksi.findMany();
   return new Map(rows.map((r) => [`${r.jenisField}::${r.kunciMentah}`, r.nilaiResolusi]));
 }
+
+export type NipTerdaftar = Set<string>;
+
+/** NIP yang SUDAH PERNAH tercatat (dari bulan manapun sebelumnya) - dipakai utk membedakan
+ *  "pegawai baru" (NIP belum pernah muncul) dari "pegawai lama yang datanya kebetulan kosong
+ *  lagi bulan ini", lihat resolveJabatan. */
+export async function loadNipTerdaftar(): Promise<NipTerdaftar> {
+  const rows = await prisma.pegawai.findMany({ select: { nip: true } });
+  return new Set(rows.map((r) => r.nip));
+}

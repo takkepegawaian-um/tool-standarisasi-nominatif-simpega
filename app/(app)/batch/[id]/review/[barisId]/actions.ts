@@ -70,7 +70,7 @@ export async function resolveBarisBermasalah(
     return { error: "Jabatan fungsional/fungsi wajib dipilih." };
   }
 
-  let jabatanTambahan: JabatanTambahanSlot | null = null;
+  const jabatanTambahanSlots: JabatanTambahanSlot[] = [];
   if (kelompok !== "Akademisi Luar UM" && formData.get("adaJabatanTambahan") === "on") {
     const roleKode = String(formData.get("jabatanTambahanRoleKode") ?? "").trim();
     const targetKode = String(formData.get("jabatanTambahanTargetKode") ?? "").trim();
@@ -79,12 +79,30 @@ export async function resolveBarisBermasalah(
       return { error: "Jabatan Tambahan dicentang tapi role/unit-prodi/status pengangkatan belum lengkap dipilih." };
     }
     const [targetTipe, targetId] = targetKode.split(":");
-    jabatanTambahan = {
+    jabatanTambahanSlots.push({
       jabatanTambahanRoleKode: roleKode,
       unitAsalKode: targetTipe === "UNIT" ? targetId : null,
       programStudiKode: targetTipe === "PRODI" ? targetId : null,
       statusPengangkatan,
-    };
+    });
+
+    // Slot kedua HANYA relevan kalau slot pertama juga dicentang (skema maks 2/bulan, tidak
+    // masuk akal punya jabatan tambahan "kedua" tanpa yang pertama).
+    if (formData.get("adaJabatanTambahanKedua") === "on") {
+      const roleKode2 = String(formData.get("jabatanTambahanRoleKode2") ?? "").trim();
+      const targetKode2 = String(formData.get("jabatanTambahanTargetKode2") ?? "").trim();
+      const statusPengangkatan2 = String(formData.get("statusPengangkatan2") ?? "").trim();
+      if (!roleKode2 || !targetKode2 || !statusPengangkatan2) {
+        return { error: "Jabatan Tambahan Kedua dicentang tapi role/unit-prodi/status pengangkatan belum lengkap dipilih." };
+      }
+      const [targetTipe2, targetId2] = targetKode2.split(":");
+      jabatanTambahanSlots.push({
+        jabatanTambahanRoleKode: roleKode2,
+        unitAsalKode: targetTipe2 === "UNIT" ? targetId2 : null,
+        programStudiKode: targetTipe2 === "PRODI" ? targetId2 : null,
+        statusPengangkatan: statusPengangkatan2,
+      });
+    }
   }
 
   const data: ResolvedNominatif = {
@@ -102,9 +120,7 @@ export async function resolveBarisBermasalah(
     jabatanFungsiUmumKode,
     kategoriAkademisiLuarKode: kelompok === "Akademisi Luar UM" ? kategoriAkademisiLuarKode : null,
     unitAsalKode,
-    // Form manual cuma pernah punya 0 atau 1 slot - lihat lib/domain/classify.ts utk kasus 2
-    // slot otomatis ("role1 dan role2"), yang tidak melewati form ini sama sekali.
-    jabatanTambahan: jabatanTambahan ? [jabatanTambahan] : [],
+    jabatanTambahan: jabatanTambahanSlots,
   };
 
   const { prisma } = await import("@/lib/db");
