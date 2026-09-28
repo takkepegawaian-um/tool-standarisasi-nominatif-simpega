@@ -31,7 +31,7 @@ export default async function LoginPage({
   return (
     <main className="flex min-h-screen items-center justify-center bg-sidebar px-4">
       <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
-        <Image src="/logo.webp" alt="Logo KDSI SDM" width={56} height={56} className="h-14 w-14 object-contain" />
+        <Image src="/logo.png" alt="Logo KDSI SDM" width={56} height={56} className="h-14 w-14 object-contain" />
         <h1 className="mt-4 text-lg font-semibold text-slate-900">KDS1</h1>
         <p className="mt-1 text-sm text-slate-500">Standarisasi nominatif — masuk sebagai admin SDM</p>
 
