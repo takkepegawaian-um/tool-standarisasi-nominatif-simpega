@@ -158,6 +158,7 @@ model User {
   barisDiselesaikan BarisBermasalah[]
   kamusKoreksi     KamusKoreksi[]
   auditLog         AuditLog[]
+  catatanPerubahan CatatanPerubahanBatch[]
 
   @@map("user")
 }
@@ -178,6 +179,8 @@ model UploadBatch {
   diunggahOleh    User              @relation(fields: [diunggahOlehId], references: [id])
   nominatif       NominatifBulanan[]
   barisBermasalah BarisBermasalah[]
+  catatanSebagaiA CatatanPerubahanBatch[] @relation("CatatanBatchA")
+  catatanSebagaiB CatatanPerubahanBatch[] @relation("CatatanBatchB")
 
   @@map("upload_batch")
 }
@@ -228,6 +231,34 @@ model AuditLog {
   dilakukanOleh User @relation(fields: [dilakukanOlehId], references: [id])
 
   @@map("audit_log")
+}
+
+/**
+ * Catatan admin kenapa seorang pegawai muncul sbg "baru"/"hilang"/"anomali" saat membandingkan
+ * 2 batch (fitur Bandingkan Batch) - MURNI dokumentasi/riwayat, TIDAK memicu perubahan data apa
+ * pun (lihat app/(app)/bandingkan). `nipUtama` dihitung deterministik tiap render (NIP terkecil
+ * dlm grup utk kategori Anomali, atau NIP orangnya sendiri utk Baru/Hilang) supaya catatan lama
+ * tetap "nempel" ke baris yang sama walau halaman di-refresh/dibuka ulang.
+ */
+model CatatanPerubahanBatch {
+  id             String   @id @default(cuid())
+  uploadBatchAId String
+  uploadBatchBId String
+  kategori       String // Baru/Hilang/Anomali
+  nipUtama       String
+  nipTerkait     Json? // array NIP lain yg terlibat - cuma dipakai kategori Anomali (grup >1 NIP)
+  nama           String
+  alasan         String
+  dibuatOlehId   String
+  dibuatPada     DateTime @default(now())
+  diperbaruiPada DateTime @updatedAt
+
+  uploadBatchA UploadBatch @relation("CatatanBatchA", fields: [uploadBatchAId], references: [id], onDelete: Cascade)
+  uploadBatchB UploadBatch @relation("CatatanBatchB", fields: [uploadBatchBId], references: [id], onDelete: Cascade)
+  dibuatOleh   User        @relation(fields: [dibuatOlehId], references: [id])
+
+  @@unique([uploadBatchAId, uploadBatchBId, kategori, nipUtama])
+  @@map("catatan_perubahan_batch")
 }
 
 model NominatifBulanan {

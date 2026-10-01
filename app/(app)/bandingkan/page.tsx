@@ -8,7 +8,7 @@ import {
 } from "@/lib/domain/identitasEksternal";
 import { loadKamusMap } from "@/lib/domain/masterCache";
 
-import { BandingkanTabs } from "./BandingkanTabs";
+import { BandingkanTabs, type AnomaliTampil } from "./BandingkanTabs";
 
 function toRingkas(p: {
   pegawaiNip: string;
@@ -41,18 +41,11 @@ export default async function BandingkanPage({
     select: { id: true, bulan: true, tahun: true, jumlahBarisTotal: true, diunggahPada: true },
   });
 
-  let labelA: string | null = null;
-  let labelB: string | null = null;
   let hasilUntukUi: {
     orangBaru: PegawaiRingkas[];
     orangHilang: PegawaiRingkas[];
-    kemungkinanBerubah: Array<{
-      hilang: PegawaiRingkas;
-      baru: PegawaiRingkas;
-      skor: number;
-      sudahTercatat: boolean;
-      polaPlaceholder: boolean;
-    }>;
+    nipAnomali: AnomaliTampil[];
+    catatanTersimpan: { kategori: string; nipUtama: string; alasan: string }[];
   } | null = null;
 
   if (a && b) {
@@ -62,9 +55,6 @@ export default async function BandingkanPage({
     ]);
 
     if (batchA && batchB) {
-      labelA = `${namaBulan(batchA.bulan)} ${batchA.tahun}`;
-      labelB = `${namaBulan(batchB.bulan)} ${batchB.tahun}`;
-
       const select = {
         pegawaiNip: true,
         nama: true,
@@ -73,23 +63,31 @@ export default async function BandingkanPage({
         unitAsal: { select: { nama: true } },
       } as const;
 
-      const [pegawaiA, pegawaiB, kamus] = await Promise.all([
+      const [pegawaiA, pegawaiB, kamus, catatanTersimpan] = await Promise.all([
         prisma.nominatifBulanan.findMany({ where: { uploadBatchId: a }, select }),
         prisma.nominatifBulanan.findMany({ where: { uploadBatchId: b }, select }),
         loadKamusMap(),
+        prisma.catatanPerubahanBatch.findMany({
+          where: { uploadBatchAId: a, uploadBatchBId: b },
+          select: { kategori: true, nipUtama: true, alasan: true },
+        }),
       ]);
 
       const perbandingan = bandingkanDaftarPegawai(pegawaiA.map(toRingkas), pegawaiB.map(toRingkas));
 
-      const kemungkinanBerubah = perbandingan.kemungkinanBerubah.map((pasangan) => {
-        const kunci = kunciIdentitasEksternal(pasangan.baru.nama);
-        const kamusNip = kamus.get(`${JENIS_FIELD_IDENTITAS_EKSTERNAL}::${kunci}`);
-        const sudahTercatat = kamusNip === pasangan.baru.nip || kamusNip === pasangan.hilang.nip;
-        const polaPlaceholder = isNipPlaceholderTidakStabil(pasangan.baru.nip, batchB.bulan, batchB.tahun);
-        return { ...pasangan, sudahTercatat, polaPlaceholder };
+      const nipAnomali: AnomaliTampil[] = perbandingan.nipAnomali.map((anomali) => {
+        const sudahTercatat = anomali.anggota.some((anggota) => {
+          const kunci = kunciIdentitasEksternal(anggota.nama);
+          const kamusNip = kamus.get(`${JENIS_FIELD_IDENTITAS_EKSTERNAL}::${kunci}`);
+          return anomali.anggota.some((a2) => a2.nip === kamusNip);
+        });
+        const polaPlaceholder = anomali.anggota.some((anggota) =>
+          isNipPlaceholderTidakStabil(anggota.nip, batchB.bulan, batchB.tahun)
+        );
+        return { ...anomali, sudahTercatat, polaPlaceholder };
       });
 
-      hasilUntukUi = { ...perbandingan, kemungkinanBerubah };
+      hasilUntukUi = { ...perbandingan, nipAnomali, catatanTersimpan };
     }
   }
 
@@ -98,7 +96,7 @@ export default async function BandingkanPage({
       <div>
         <h1 className="text-xl font-semibold text-slate-900">Bandingkan Batch</h1>
         <p className="text-sm text-slate-500">
-          Cek penambahan, pengurangan, dan kemungkinan NIP berubah antara 2 batch nominatif manapun.
+          Cek penambahan, pengurangan, dan anomali NIP (duplikat/berubah) antara 2 batch nominatif manapun.
         </p>
       </div>
 
@@ -147,13 +145,14 @@ export default async function BandingkanPage({
         </button>
       </form>
 
-      {hasilUntukUi && labelA && labelB && (
+      {hasilUntukUi && a && b && (
         <BandingkanTabs
-          labelA={labelA}
-          labelB={labelB}
+          batchAId={a}
+          batchBId={b}
           orangBaru={hasilUntukUi.orangBaru}
           orangHilang={hasilUntukUi.orangHilang}
-          kemungkinanBerubah={hasilUntukUi.kemungkinanBerubah}
+          nipAnomali={hasilUntukUi.nipAnomali}
+          catatanTersimpan={hasilUntukUi.catatanTersimpan}
         />
       )}
     </div>
