@@ -34,6 +34,9 @@ export default async function BandingkanPage({
   const { a, b } = await searchParams;
 
   const batchList = await prisma.uploadBatch.findMany({
+    // Batch "Dibatalkan" (sudah ditimpa upload ulang bulan/tahun yang sama) sengaja disembunyikan
+    // dari sini - datanya sudah 0, membandingkannya tidak ada gunanya & cuma membingungkan.
+    where: { status: { not: "Dibatalkan" } },
     orderBy: [{ tahun: "desc" }, { bulan: "desc" }, { diunggahPada: "desc" }],
     select: { id: true, bulan: true, tahun: true, jumlahBarisTotal: true, diunggahPada: true },
   });

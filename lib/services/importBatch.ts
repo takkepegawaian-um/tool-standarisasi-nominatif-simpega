@@ -152,6 +152,17 @@ export async function importBatch(
       // yang baru (cascade otomatis hapus jabatan tambahan anaknya).
       await tx.nominatifBulanan.deleteMany({ where: { bulan, tahun } });
 
+      // Batch LAMA utk bulan/tahun yang sama kehilangan SELURUH data nominatifnya oleh deleteMany
+      // di atas, tapi row UploadBatch-nya sendiri sebelumnya dibiarkan apa adanya - status masih
+      // "Selesai" dgn angka jumlahBerhasil lama yang jadi menyesatkan (kelihatan seperti batch
+      // valid padahal datanya sudah 0). Ditemukan lewat fitur Bandingkan Batch. Tandai "Dibatalkan"
+      // supaya jelas sudah ditimpa, tanpa menghapus baris itu sendiri (tetap jadi jejak audit
+      // "pernah ada upload ini, kapan, oleh siapa").
+      await tx.uploadBatch.updateMany({
+        where: { bulan, tahun, id: { not: batch.id } },
+        data: { status: "Dibatalkan" },
+      });
+
       if (nominatifRows.length > 0) {
         const uniqueNips = [...new Set(nominatifRows.map((r) => r.pegawaiNip))];
         await tx.pegawai.createMany({
