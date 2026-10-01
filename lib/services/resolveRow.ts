@@ -10,6 +10,11 @@ import {
   kunciStatusKepegawaian,
   kunciUnitKerja,
 } from "@/lib/domain/classify";
+import {
+  isNipPlaceholderTidakStabil,
+  JENIS_FIELD_IDENTITAS_EKSTERNAL,
+  kunciIdentitasEksternal,
+} from "@/lib/domain/identitasEksternal";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
 export type IngatFlags = {
@@ -47,30 +52,52 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
   });
   const rawRow = baris.dataMentah as unknown as RawNominatifRow;
 
+  // NIP placeholder SIMPEGA (Akademisi Luar UM tanpa NIP asli) berubah tiap ekstraksi - lihat
+  // lib/domain/identitasEksternal.ts. Kalau baris.nip berpola placeholder DAN identitasnya sudah
+  // pernah dikonfirmasi admin (lewat PilihIdentitasForm), pakai NIP kanonik tersimpan itu sebagai
+  // identitas SEBENARNYA, bukan placeholder mentah - supaya riwayat orang ini tetap nyambung.
+  const batchMeta = await prisma.uploadBatch.findUniqueOrThrow({
+    where: { id: baris.uploadBatchId },
+    select: { bulan: true, tahun: true },
+  });
+  let nipEfektif = baris.nip;
+  if (isNipPlaceholderTidakStabil(baris.nip, batchMeta.bulan, batchMeta.tahun)) {
+    const namaMentah = rawRow.namaDenganGelar || rawRow.namaTanpaGelar;
+    const kamusIdentitas = await prisma.kamusKoreksi.findUnique({
+      where: {
+        jenisField_kunciMentah: {
+          jenisField: JENIS_FIELD_IDENTITAS_EKSTERNAL,
+          kunciMentah: kunciIdentitasEksternal(namaMentah),
+        },
+      },
+    });
+    if (kamusIdentitas) nipEfektif = kamusIdentitas.nilaiResolusi;
+  }
+  // Kunci Kamus Koreksi yang berbasis NIP (Klasifikasi, KategoriAkademisiLuar, Jabatan saat
+  // kosong) harus pakai identitas KANONIK ini, bukan placeholder mentah - lihat rawRow di bawah.
+  const rawRowUntukKamus: RawNominatifRow = { ...rawRow, nip: nipEfektif };
+
   await prisma.$transaction(async (tx) => {
     await tx.pegawai.upsert({
-      where: { nip: baris.nip },
-      create: { nip: baris.nip },
+      where: { nip: nipEfektif },
+      create: { nip: nipEfektif },
       update: {},
     });
 
-    const nominatifBulanan = await tx.uploadBatch.findUniqueOrThrow({
-      where: { id: baris.uploadBatchId },
-      select: { bulan: true, tahun: true },
-    });
+    const nominatifBulanan = batchMeta;
 
     const { jabatanTambahan, ...nominatifData } = input.data;
 
     const nominatif = await tx.nominatifBulanan.upsert({
       where: {
         pegawaiNip_bulan_tahun: {
-          pegawaiNip: baris.nip,
+          pegawaiNip: nipEfektif,
           bulan: nominatifBulanan.bulan,
           tahun: nominatifBulanan.tahun,
         },
       },
       create: {
-        pegawaiNip: baris.nip,
+        pegawaiNip: nipEfektif,
         bulan: nominatifBulanan.bulan,
         tahun: nominatifBulanan.tahun,
         uploadBatchId: baris.uploadBatchId,
@@ -113,10 +140,12 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
 
     if (input.ingat.klasifikasi) {
       await tx.kamusKoreksi.upsert({
-        where: { jenisField_kunciMentah: { jenisField: "Klasifikasi", kunciMentah: kunciKlasifikasi(rawRow) } },
+        where: {
+          jenisField_kunciMentah: { jenisField: "Klasifikasi", kunciMentah: kunciKlasifikasi(rawRowUntukKamus) },
+        },
         create: {
           jenisField: "Klasifikasi",
-          kunciMentah: kunciKlasifikasi(rawRow),
+          kunciMentah: kunciKlasifikasi(rawRowUntukKamus),
           nilaiResolusi: input.kelompok,
           dibuatOlehId: input.diselesaikanOlehId,
         },
@@ -128,12 +157,12 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
         where: {
           jenisField_kunciMentah: {
             jenisField: "KategoriAkademisiLuar",
-            kunciMentah: kunciKategoriAkademisiLuar(rawRow),
+            kunciMentah: kunciKategoriAkademisiLuar(rawRowUntukKamus),
           },
         },
         create: {
           jenisField: "KategoriAkademisiLuar",
-          kunciMentah: kunciKategoriAkademisiLuar(rawRow),
+          kunciMentah: kunciKategoriAkademisiLuar(rawRowUntukKamus),
           nilaiResolusi: input.data.kategoriAkademisiLuarKode,
           dibuatOlehId: input.diselesaikanOlehId,
         },
@@ -173,10 +202,12 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
     const kodeJab = jabatanKodeUntukKamus(input.data);
     if (input.ingat.jabatan && jenisFieldJab && kodeJab) {
       await tx.kamusKoreksi.upsert({
-        where: { jenisField_kunciMentah: { jenisField: jenisFieldJab, kunciMentah: kunciJabatan(rawRow) } },
+        where: {
+          jenisField_kunciMentah: { jenisField: jenisFieldJab, kunciMentah: kunciJabatan(rawRowUntukKamus) },
+        },
         create: {
           jenisField: jenisFieldJab,
-          kunciMentah: kunciJabatan(rawRow),
+          kunciMentah: kunciJabatan(rawRowUntukKamus),
           nilaiResolusi: kodeJab,
           dibuatOlehId: input.diselesaikanOlehId,
         },
@@ -219,7 +250,7 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
         aksi: "ResolveBarisBermasalah",
         entitas: "BarisBermasalah",
         entitasId: baris.id,
-        detail: { nip: baris.nip, kelompok: input.kelompok, ingat: input.ingat },
+        detail: { nip: baris.nip, nipEfektif, kelompok: input.kelompok, ingat: input.ingat },
         dilakukanOlehId: input.diselesaikanOlehId,
       },
     });

@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { classifyRow, pilihAlasanUtama } from "@/lib/domain/classify";
 import type { ResolvedNominatif } from "@/lib/domain/classify";
+import {
+  isNipPlaceholderTidakStabil,
+  JENIS_FIELD_IDENTITAS_EKSTERNAL,
+  kunciIdentitasEksternal,
+} from "@/lib/domain/identitasEksternal";
 import { loadKamusMap, loadMasterCache, loadNipDikecualikanPermanen, loadNipTerdaftar } from "@/lib/domain/masterCache";
 import { parseRawNominatif } from "@/lib/excel/parseRawNominatif";
 import type { RawNominatifRow } from "@/lib/excel/types";
@@ -70,23 +75,56 @@ export async function importBatch(
   const jabatanTambahanRows: JabatanTambahanRow[] = [];
   const barisBermasalahRows: BarisBermasalahRow[] = [];
 
-  for (const row of rows) {
-    const result = classifyRow(row, master, kamus, nipTerdaftar);
+  function prosesHasilClassify(
+    rowAsli: RawNominatifRow,
+    pegawaiNip: string,
+    result: ReturnType<typeof classifyRow>
+  ) {
     if (result.ok) {
       const { jabatanTambahan, ...nominatifData } = result.data;
       const id = randomUUID();
-      nominatifRows.push({ id, pegawaiNip: row.nip, ...nominatifData });
+      nominatifRows.push({ id, pegawaiNip, ...nominatifData });
       for (const slot of jabatanTambahan) {
         jabatanTambahanRows.push({ nominatifBulananId: id, ...slot });
       }
     } else {
       barisBermasalahRows.push({
-        nip: row.nip,
-        dataMentah: toDataMentah(row),
+        nip: pegawaiNip,
+        dataMentah: toDataMentah(rowAsli),
         alasanUtama: pilihAlasanUtama(result.issues),
         detailAlasan: result.issues.map((i) => i.detail).join(" | "),
       });
     }
+  }
+
+  for (const row of rows) {
+    // NIP placeholder SIMPEGA (Akademisi Luar UM tanpa NIP asli) berubah tiap ekstraksi - lihat
+    // lib/domain/identitasEksternal.ts. Resolusi identitas HARUS terjadi SEBELUM classifyRow,
+    // karena beberapa kunci Kamus Koreksi (Klasifikasi, KategoriAkademisiLuar) sengaja berbasis
+    // NIP - kalau classifyRow jalan duluan pakai NIP placeholder mentah, kamus-kamus itu juga ikut
+    // "lupa" tiap bulan, bukan cuma pegawaiNip yang tersimpan.
+    if (isNipPlaceholderTidakStabil(row.nip, bulan, tahun)) {
+      const namaUntukIdentitas = row.namaDenganGelar || row.namaTanpaGelar;
+      const kunci = kunciIdentitasEksternal(namaUntukIdentitas);
+      const nipKanonik = kamus.get(`${JENIS_FIELD_IDENTITAS_EKSTERNAL}::${kunci}`);
+      if (nipKanonik) {
+        const rowEfektif = { ...row, nip: nipKanonik };
+        prosesHasilClassify(row, nipKanonik, classifyRow(rowEfektif, master, kamus, nipTerdaftar));
+      } else {
+        // Nama ini belum pernah dikenali sebelumnya - JANGAN diklasifikasi otomatis sama sekali,
+        // selalu masuk review manual dulu (admin tentukan: orang lama dgn NIP berubah, atau
+        // benar pegawai baru) - lihat PilihIdentitasForm.tsx.
+        barisBermasalahRows.push({
+          nip: row.nip,
+          dataMentah: toDataMentah(row),
+          alasanUtama: "IdentitasEksternalPerluVerifikasi",
+          detailAlasan: `NIP placeholder tidak stabil (dibuat SIMPEGA sendiri, bukan NIP asli) untuk "${namaUntukIdentitas}" - nama ini belum pernah dikenali sebelumnya, perlu verifikasi manual.`,
+        });
+      }
+      continue;
+    }
+
+    prosesHasilClassify(row, row.nip, classifyRow(row, master, kamus, nipTerdaftar));
   }
 
   const jumlahBerhasil = nominatifRows.length;

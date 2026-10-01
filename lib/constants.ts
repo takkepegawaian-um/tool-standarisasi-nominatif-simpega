@@ -23,6 +23,7 @@ export const ALASAN_BARIS_BERMASALAH = [
   "UnitKerjaTidakDikenali",
   "UnitKerjaKosong",
   "PendidikanTidakDikenali",
+  "IdentitasEksternalPerluVerifikasi",
   "Lainnya",
 ] as const;
 export type AlasanBarisBermasalah = (typeof ALASAN_BARIS_BERMASALAH)[number];
@@ -39,6 +40,10 @@ export const ALASAN_LABEL: Record<AlasanBarisBermasalah, string> = {
   UnitKerjaTidakDikenali: "Unit kerja tidak cocok master (perlu keputusan)",
   UnitKerjaKosong: "Unit kerja kosong di file sumber",
   PendidikanTidakDikenali: "Pendidikan tidak dikenali",
+  // NIP placeholder SIMPEGA (Akademisi Luar UM tanpa NIP asli) tidak stabil antar bulan - lihat
+  // lib/domain/identitasEksternal.ts. Beda dari kategori lain: bukan field yg salah cocok, tapi
+  // identitas ORANGNYA yang perlu dikonfirmasi dulu (orang lama dgn NIP berubah, atau baru).
+  IdentitasEksternalPerluVerifikasi: "Identitas Akademisi Luar UM perlu verifikasi (NIP SIMPEGA tidak stabil)",
   Lainnya: "Lainnya",
 };
 

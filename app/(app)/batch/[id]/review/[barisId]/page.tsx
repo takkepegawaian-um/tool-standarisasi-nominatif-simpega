@@ -11,11 +11,17 @@ import {
   resolveStatusKepegawaian,
   resolveUnitKerja,
 } from "@/lib/domain/classify";
+import {
+  cariKandidatIdentitasMirip,
+  JENIS_FIELD_IDENTITAS_EKSTERNAL,
+  kunciIdentitasEksternal,
+} from "@/lib/domain/identitasEksternal";
 import { loadKamusMap, loadMasterCache, loadNipTerdaftar } from "@/lib/domain/masterCache";
 import { exactMatch } from "@/lib/domain/matching";
 import { prisma } from "@/lib/db";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
+import { PilihIdentitasForm } from "./PilihIdentitasForm";
 import { ResolveForm } from "./ResolveForm";
 
 export default async function ResolveRowPage({
@@ -30,21 +36,75 @@ export default async function ResolveRowPage({
 
   const batch = await prisma.uploadBatch.findUniqueOrThrow({ where: { id: baris.uploadBatchId } });
 
-  // Snapshot bulan SEBELUMNYA (kalau ada) utk NIP yang sama - dipakai sbg SARAN pengisian saat
-  // field mentah kosong total di file sumber (bukan auto-terapkan, admin tetap harus konfirmasi
-  // - unit kerja/jabatan orang BISA berubah antar bulan, ini cuma titik awal drpd cari dari nol).
+  const [master, kamus, nipTerdaftar] = await Promise.all([loadMasterCache(), loadKamusMap(), loadNipTerdaftar()]);
+  const raw = baris.dataMentah as unknown as RawNominatifRow;
+
+  // Identitas Akademisi Luar UM dgn NIP placeholder SIMPEGA (tidak stabil antar bulan) HARUS
+  // diverifikasi dulu sebelum field lain bisa diresolusi dgn benar - lihat identitasEksternal.ts
+  // & PilihIdentitasForm.tsx. Selama belum ada jawaban di Kamus, form resolusi normal di bawah
+  // BELUM ditampilkan sama sekali.
+  let rawEfektif = raw;
+  if (baris.alasanUtama === "IdentitasEksternalPerluVerifikasi") {
+    const namaMentah = raw.namaDenganGelar || raw.namaTanpaGelar;
+    const kamusIdentitas = await prisma.kamusKoreksi.findUnique({
+      where: {
+        jenisField_kunciMentah: {
+          jenisField: JENIS_FIELD_IDENTITAS_EKSTERNAL,
+          kunciMentah: kunciIdentitasEksternal(namaMentah),
+        },
+      },
+    });
+
+    if (!kamusIdentitas) {
+      const riwayatAkl = await prisma.nominatifBulanan.findMany({
+        where: { jenisPegawaiKode: "AKL" },
+        distinct: ["pegawaiNip"],
+        orderBy: { dibuatPada: "desc" },
+        select: { pegawaiNip: true, nama: true },
+      });
+      const kandidat = cariKandidatIdentitasMirip(
+        namaMentah,
+        riwayatAkl.map((r) => ({ nip: r.pegawaiNip, nama: r.nama }))
+      );
+
+      return (
+        <div className="space-y-6">
+          <div>
+            <Link href={`/batch/${batchId}/review`} className="text-sm text-slate-500 hover:text-slate-700">
+              &larr; Kembali ke Daftar Review
+            </Link>
+            <h1 className="mt-1 text-xl font-semibold text-slate-900">
+              Selesaikan Baris — NIP {baris.nip}
+            </h1>
+            <p className="text-sm text-slate-500">{baris.detailAlasan}</p>
+          </div>
+          <PilihIdentitasForm
+            batchId={batchId}
+            barisId={barisId}
+            nama={namaMentah}
+            nipPlaceholder={baris.nip}
+            kandidat={kandidat}
+          />
+        </div>
+      );
+    }
+
+    rawEfektif = { ...raw, nip: kamusIdentitas.nilaiResolusi };
+  }
+
+  // Snapshot bulan SEBELUMNYA (kalau ada) utk NIP (efektif/kanonik) yang sama - dipakai sbg SARAN
+  // pengisian saat field mentah kosong total di file sumber (bukan auto-terapkan, admin tetap
+  // harus konfirmasi - unit kerja/jabatan orang BISA berubah antar bulan, ini cuma titik awal
+  // drpd cari dari nol).
   const snapshotSebelumnya = await prisma.nominatifBulanan.findFirst({
     where: {
-      pegawaiNip: baris.nip,
+      pegawaiNip: rawEfektif.nip,
       OR: [{ tahun: { lt: batch.tahun } }, { tahun: batch.tahun, bulan: { lt: batch.bulan } }],
     },
     orderBy: [{ tahun: "desc" }, { bulan: "desc" }],
   });
 
-  const [master, kamus, nipTerdaftar] = await Promise.all([loadMasterCache(), loadKamusMap(), loadNipTerdaftar()]);
-  const raw = baris.dataMentah as unknown as RawNominatifRow;
-
-  const kelompokResult = resolveKelompok(raw, master, kamus);
+  const kelompokResult = resolveKelompok(rawEfektif, master, kamus);
   const prefillKelompok = "kelompok" in kelompokResult ? kelompokResult.kelompok : null;
 
   let prefillStatus: string | null = null;
@@ -53,19 +113,19 @@ export default async function ResolveRowPage({
   let prefillJabatan: string | null = null;
 
   if (prefillKelompok === "Akademisi Luar UM") {
-    const kat = resolveKategoriAkademisiLuar(raw, master, kamus);
+    const kat = resolveKategoriAkademisiLuar(rawEfektif, master, kamus);
     if ("kode" in kat) prefillKategori = kat.kode;
   } else if (prefillKelompok) {
-    const status = resolveStatusKepegawaian(raw, master, kamus);
+    const status = resolveStatusKepegawaian(rawEfektif, master, kamus);
     if ("kode" in status) {
       prefillStatus = status.kode;
-      const golongan = resolveGolongan(raw, master, kamus, status.kategori);
+      const golongan = resolveGolongan(rawEfektif, master, kamus, status.kategori);
       if ("kode" in golongan) prefillGolongan = golongan.kode;
     }
   }
 
   if (prefillKelompok) {
-    const jabatan = resolveJabatan(raw, master, kamus, prefillKelompok, nipTerdaftar);
+    const jabatan = resolveJabatan(rawEfektif, master, kamus, prefillKelompok, nipTerdaftar);
     if (!("issue" in jabatan)) {
       if (jabatan.jabatanFungsionalDosenKode) prefillJabatan = `DOSEN:${jabatan.jabatanFungsionalDosenKode}`;
       else if (jabatan.jabatanFungsionalTendikKode) prefillJabatan = `TENDIK:${jabatan.jabatanFungsionalTendikKode}`;
@@ -73,7 +133,7 @@ export default async function ResolveRowPage({
     }
   }
 
-  const unit = resolveUnitKerja(raw, master, kamus);
+  const unit = resolveUnitKerja(rawEfektif, master, kamus);
   let prefillUnit = "kode" in unit ? unit.kode : null;
 
   let catatanSaranBulanLalu: string | null = null;
@@ -106,9 +166,9 @@ export default async function ResolveRowPage({
   let prefillJabatanTambahanTargetKode2: string | null = null;
   let prefillStatusPengangkatan2: string | null = null;
 
-  if (prefillKelompok && prefillKelompok !== "Akademisi Luar UM" && raw.jabatanTambahanRaw.trim()) {
+  if (prefillKelompok && prefillKelompok !== "Akademisi Luar UM" && rawEfektif.jabatanTambahanRaw.trim()) {
     prefillAdaJabatanTambahan = true;
-    const jt = resolveJabatanTambahan(raw, master, kamus, prefillKelompok);
+    const jt = resolveJabatanTambahan(rawEfektif, master, kamus, prefillKelompok);
     if ("slots" in jt && jt.slots.length > 0) {
       const [slot, slotKedua] = jt.slots;
       prefillJabatanTambahanRoleKode = slot.jabatanTambahanRoleKode;
@@ -131,7 +191,7 @@ export default async function ResolveRowPage({
     } else {
       // Kamus belum tahu Status Pengangkatan-nya, tapi role & unit/prodi mungkin tetap bisa
       // di-prefill dari pencocokan langsung supaya admin tidak perlu cari manual dari nol.
-      const { roleRaw, unit: u, prodi, status } = pisahJabatanTambahanRaw(raw.jabatanTambahanRaw, master);
+      const { roleRaw, unit: u, prodi, status } = pisahJabatanTambahanRaw(rawEfektif.jabatanTambahanRaw, master);
       const role = exactMatch(master.jabatanTambahanRole, (r) => r.namaRole, roleRaw);
       if (role) prefillJabatanTambahanRoleKode = role.kode;
       if (u) prefillJabatanTambahanTargetKode = `UNIT:${u.kode}`;
@@ -189,7 +249,7 @@ export default async function ResolveRowPage({
       <ResolveForm
         batchId={batchId}
         barisId={barisId}
-        raw={raw}
+        raw={rawEfektif}
         prefill={{
           kelompok: prefillKelompok,
           statusKepegawaianKode: prefillStatus,

@@ -54,12 +54,25 @@ function IconBook({ className }: IconProps) {
   );
 }
 
+function IconScale({ className }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className={className}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 3v18m0-18L6 6m6-3l6 3M4.5 9l-2.25 4.5a2.25 2.25 0 004.5 0L4.5 9zm15 0l-2.25 4.5a2.25 2.25 0 004.5 0L19.5 9z"
+      />
+    </svg>
+  );
+}
+
 const NAV_SECTIONS = [
   {
     label: "Data",
     items: [
       { href: "/", label: "Ringkasan", icon: IconHome, exact: true },
       { href: "/arsip", label: "Arsip", icon: IconArchive, exact: false },
+      { href: "/bandingkan", label: "Bandingkan Batch", icon: IconScale, exact: false },
     ],
   },
   {
