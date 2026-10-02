@@ -234,16 +234,21 @@ model AuditLog {
 }
 
 /**
- * Catatan admin kenapa seorang pegawai muncul sbg "baru"/"hilang"/"anomali" saat membandingkan
- * 2 batch (fitur Bandingkan Batch) - MURNI dokumentasi/riwayat, TIDAK memicu perubahan data apa
- * pun (lihat app/(app)/bandingkan). `nipUtama` dihitung deterministik tiap render (NIP terkecil
- * dlm grup utk kategori Anomali, atau NIP orangnya sendiri utk Baru/Hilang) supaya catatan lama
- * tetap "nempel" ke baris yang sama walau halaman di-refresh/dibuka ulang.
+ * Catatan admin kenapa seorang pegawai muncul sbg "baru"/"hilang"/"anomali" di fitur Bandingkan
+ * Batch - MURNI dokumentasi/riwayat, TIDAK memicu perubahan data apa pun. Dikunci ke `(kategori,
+ * nipUtama)` SAJA (bukan ke pasangan batch A/B yang sedang dibandingkan) - supaya catatan yang
+ * sudah diisi tetap melekat ke NIP itu di perbandingan MANAPUN yang melibatkan dia (mis. "pegawai
+ * baru" September 2026 tetap kelihatan baik dibandingkan dari Agustus 2026 maupun dari September
+ * 2025 - itu fakta ttg NIP-nya, bukan ttg kombinasi batch yang kebetulan sedang dipilih admin).
+ * `uploadBatchAId`/`uploadBatchBId` cuma konteks informatif (perbandingan terakhir saat catatan
+ * ditulis/diedit), boleh jadi null kalau batch itu kelak dihapus - TIDAK ikut cascade-delete
+ * catatannya sendiri. `nipUtama` dihitung deterministik tiap render (NIP terkecil dlm grup utk
+ * kategori Anomali, atau NIP orangnya sendiri utk Baru/Hilang).
  */
 model CatatanPerubahanBatch {
   id             String   @id @default(cuid())
-  uploadBatchAId String
-  uploadBatchBId String
+  uploadBatchAId String?
+  uploadBatchBId String?
   kategori       String // Baru/Hilang/Anomali
   nipUtama       String
   nipTerkait     Json? // array NIP lain yg terlibat - cuma dipakai kategori Anomali (grup >1 NIP)
@@ -253,11 +258,11 @@ model CatatanPerubahanBatch {
   dibuatPada     DateTime @default(now())
   diperbaruiPada DateTime @updatedAt
 
-  uploadBatchA UploadBatch @relation("CatatanBatchA", fields: [uploadBatchAId], references: [id], onDelete: Cascade)
-  uploadBatchB UploadBatch @relation("CatatanBatchB", fields: [uploadBatchBId], references: [id], onDelete: Cascade)
+  uploadBatchA UploadBatch? @relation("CatatanBatchA", fields: [uploadBatchAId], references: [id], onDelete: SetNull)
+  uploadBatchB UploadBatch? @relation("CatatanBatchB", fields: [uploadBatchBId], references: [id], onDelete: SetNull)
   dibuatOleh   User        @relation(fields: [dibuatOlehId], references: [id])
 
-  @@unique([uploadBatchAId, uploadBatchBId, kategori, nipUtama])
+  @@unique([kategori, nipUtama])
   @@map("catatan_perubahan_batch")
 }
 

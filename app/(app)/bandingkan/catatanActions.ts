@@ -17,20 +17,22 @@ export async function simpanCatatanPerubahan(formData: FormData): Promise<void> 
   const alasan = String(formData.get("alasan") ?? "").trim();
   const nipTerkaitRaw = String(formData.get("nipTerkait") ?? "");
 
-  if (!uploadBatchAId || !uploadBatchBId || !kategori || !nipUtama) {
+  if (!kategori || !nipUtama) {
     throw new Error("Data catatan tidak lengkap.");
   }
   if (!alasan) throw new Error("Alasan tidak boleh kosong.");
 
   const nipTerkait = nipTerkaitRaw ? (JSON.parse(nipTerkaitRaw) as string[]) : undefined;
 
+  // Catatan dikunci ke (kategori, nipUtama) SAJA - bukan ke pasangan batch A/B yang sedang
+  // dibandingkan - supaya tetap melekat ke NIP itu di perbandingan manapun yang melibatkan dia.
+  // uploadBatchAId/uploadBatchBId cuma disimpan sbg konteks informatif (perbandingan terakhir
+  // saat catatan ditulis/diedit).
   await prisma.catatanPerubahanBatch.upsert({
-    where: {
-      uploadBatchAId_uploadBatchBId_kategori_nipUtama: { uploadBatchAId, uploadBatchBId, kategori, nipUtama },
-    },
+    where: { kategori_nipUtama: { kategori, nipUtama } },
     create: {
-      uploadBatchAId,
-      uploadBatchBId,
+      uploadBatchAId: uploadBatchAId || null,
+      uploadBatchBId: uploadBatchBId || null,
       kategori,
       nipUtama,
       nipTerkait,
@@ -38,7 +40,13 @@ export async function simpanCatatanPerubahan(formData: FormData): Promise<void> 
       alasan,
       dibuatOlehId: session.user.id,
     },
-    update: { alasan, nama, nipTerkait },
+    update: {
+      alasan,
+      nama,
+      nipTerkait,
+      uploadBatchAId: uploadBatchAId || null,
+      uploadBatchBId: uploadBatchBId || null,
+    },
   });
 
   revalidatePath("/bandingkan");

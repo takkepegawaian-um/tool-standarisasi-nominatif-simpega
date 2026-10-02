@@ -1,6 +1,6 @@
 import { namaBulan } from "@/lib/constants";
 import { prisma } from "@/lib/db";
-import { bandingkanDaftarPegawai, type PegawaiRingkas } from "@/lib/domain/bandingkanBatch";
+import { bandingkanDaftarPegawai, nipUtamaAnomali, type PegawaiRingkas } from "@/lib/domain/bandingkanBatch";
 import {
   isNipPlaceholderTidakStabil,
   JENIS_FIELD_IDENTITAS_EKSTERNAL,
@@ -63,14 +63,10 @@ export default async function BandingkanPage({
         unitAsal: { select: { nama: true } },
       } as const;
 
-      const [pegawaiA, pegawaiB, kamus, catatanTersimpan] = await Promise.all([
+      const [pegawaiA, pegawaiB, kamus] = await Promise.all([
         prisma.nominatifBulanan.findMany({ where: { uploadBatchId: a }, select }),
         prisma.nominatifBulanan.findMany({ where: { uploadBatchId: b }, select }),
         loadKamusMap(),
-        prisma.catatanPerubahanBatch.findMany({
-          where: { uploadBatchAId: a, uploadBatchBId: b },
-          select: { kategori: true, nipUtama: true, alasan: true },
-        }),
       ]);
 
       const perbandingan = bandingkanDaftarPegawai(pegawaiA.map(toRingkas), pegawaiB.map(toRingkas));
@@ -85,6 +81,19 @@ export default async function BandingkanPage({
           isNipPlaceholderTidakStabil(anggota.nip, batchB.bulan, batchB.tahun)
         );
         return { ...anomali, sudahTercatat, polaPlaceholder };
+      });
+
+      // Catatan dicari berdasarkan NIP yang relevan ke perbandingan SAAT INI (bukan pasangan batch
+      // A/B-nya) - supaya alasan yang sudah diisi admin di perbandingan LAIN (mis. September 2025
+      // vs September 2026) tetap kelihatan di sini kalau NIP-nya sama (mis. Agustus vs September).
+      const nipUtamaBaru = perbandingan.orangBaru.map((p) => p.nip);
+      const nipUtamaHilang = perbandingan.orangHilang.map((p) => p.nip);
+      const nipUtamaAnomaliList = perbandingan.nipAnomali.map((anomali) => nipUtamaAnomali(anomali));
+      const semuaNipUtamaRelevan = [...nipUtamaBaru, ...nipUtamaHilang, ...nipUtamaAnomaliList];
+
+      const catatanTersimpan = await prisma.catatanPerubahanBatch.findMany({
+        where: { nipUtama: { in: semuaNipUtamaRelevan } },
+        select: { kategori: true, nipUtama: true, alasan: true },
       });
 
       hasilUntukUi = { ...perbandingan, nipAnomali, catatanTersimpan };
