@@ -45,10 +45,27 @@ export async function generateNominatifExport(uploadBatchId: string): Promise<Bu
     },
   });
 
+  // Catatan dari fitur Bandingkan Batch (lihat app/(app)/bandingkan) - MURNI informasi tambahan
+  // utk admin KDS2, bukan bagian kontrak resmi SIMPEGA (template 19 kolom tidak diubah, kolom ini
+  // ditambah SETELAHNYA, kolom ke-20). "Baru" diutamakan drpd "Anomali" krn lebih relevan utk
+  // roster bulan ini (jelaskan kenapa orang itu baru muncul); kalau cuma ada catatan Anomali
+  // (mis. "Duplikat - NIP berubah"), itu dipakai sbg fallback.
+  const catatanRows = await prisma.catatanPerubahanBatch.findMany({
+    where: { nipUtama: { in: rows.map((r) => r.pegawaiNip) }, kategori: { in: ["Baru", "Anomali"] } },
+  });
+  const catatanPerNip = new Map<string, string>();
+  for (const c of catatanRows) {
+    if (c.kategori === "Baru" || !catatanPerNip.has(c.nipUtama)) {
+      catatanPerNip.set(c.nipUtama, c.alasan);
+    }
+  }
+
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(TEMPLATE_PATH);
   const sheet = workbook.getWorksheet(SHEET_NAME);
   if (!sheet) throw new Error(`Sheet "${SHEET_NAME}" tidak ditemukan di template ekspor.`);
+
+  sheet.getRow(1).getCell(20).value = "Catatan (Bandingkan Batch)";
 
   // Baris contoh/catatan bawaan template (baris 2 dst) DITIMPA langsung, bukan dihapus dulu -
   // `spliceRows` exceljs punya bug off-by-one saat count-nya pas mencapai baris terakhir sheet
@@ -81,6 +98,7 @@ export async function generateNominatifExport(uploadBatchId: string): Promise<Bu
       slot2?.jabatanTambahanRole.namaRole ?? "",
       slot2?.unitAsal?.nama ?? slot2?.programStudi?.nama ?? "",
       slot2?.statusPengangkatan ?? "",
+      catatanPerNip.get(row.pegawaiNip) ?? "",
     ];
   });
 

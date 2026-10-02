@@ -1,30 +1,8 @@
 import { namaBulan } from "@/lib/constants";
 import { prisma } from "@/lib/db";
-import { bandingkanDaftarPegawai, nipUtamaAnomali, type PegawaiRingkas } from "@/lib/domain/bandingkanBatch";
-import {
-  isNipPlaceholderTidakStabil,
-  JENIS_FIELD_IDENTITAS_EKSTERNAL,
-  kunciIdentitasEksternal,
-} from "@/lib/domain/identitasEksternal";
-import { loadKamusMap } from "@/lib/domain/masterCache";
+import { hitungPerbandinganBatch } from "@/lib/services/bandingkanBatchService";
 
-import { BandingkanTabs, type AnomaliTampil } from "./BandingkanTabs";
-
-function toRingkas(p: {
-  pegawaiNip: string;
-  nama: string;
-  jenisPegawai: { nama: string };
-  statusKepegawaian: { nama: string };
-  unitAsal: { nama: string };
-}): PegawaiRingkas {
-  return {
-    nip: p.pegawaiNip,
-    nama: p.nama,
-    jenisPegawai: p.jenisPegawai.nama,
-    status: p.statusKepegawaian.nama,
-    unitKerja: p.unitAsal.nama,
-  };
-}
+import { BandingkanTabs } from "./BandingkanTabs";
 
 export default async function BandingkanPage({
   searchParams,
@@ -41,64 +19,7 @@ export default async function BandingkanPage({
     select: { id: true, bulan: true, tahun: true, jumlahBarisTotal: true, diunggahPada: true },
   });
 
-  let hasilUntukUi: {
-    orangBaru: PegawaiRingkas[];
-    orangHilang: PegawaiRingkas[];
-    nipAnomali: AnomaliTampil[];
-    catatanTersimpan: { kategori: string; nipUtama: string; alasan: string }[];
-  } | null = null;
-
-  if (a && b) {
-    const [batchA, batchB] = await Promise.all([
-      prisma.uploadBatch.findUnique({ where: { id: a } }),
-      prisma.uploadBatch.findUnique({ where: { id: b } }),
-    ]);
-
-    if (batchA && batchB) {
-      const select = {
-        pegawaiNip: true,
-        nama: true,
-        jenisPegawai: { select: { nama: true } },
-        statusKepegawaian: { select: { nama: true } },
-        unitAsal: { select: { nama: true } },
-      } as const;
-
-      const [pegawaiA, pegawaiB, kamus] = await Promise.all([
-        prisma.nominatifBulanan.findMany({ where: { uploadBatchId: a }, select }),
-        prisma.nominatifBulanan.findMany({ where: { uploadBatchId: b }, select }),
-        loadKamusMap(),
-      ]);
-
-      const perbandingan = bandingkanDaftarPegawai(pegawaiA.map(toRingkas), pegawaiB.map(toRingkas));
-
-      const nipAnomali: AnomaliTampil[] = perbandingan.nipAnomali.map((anomali) => {
-        const sudahTercatat = anomali.anggota.some((anggota) => {
-          const kunci = kunciIdentitasEksternal(anggota.nama);
-          const kamusNip = kamus.get(`${JENIS_FIELD_IDENTITAS_EKSTERNAL}::${kunci}`);
-          return anomali.anggota.some((a2) => a2.nip === kamusNip);
-        });
-        const polaPlaceholder = anomali.anggota.some((anggota) =>
-          isNipPlaceholderTidakStabil(anggota.nip, batchB.bulan, batchB.tahun)
-        );
-        return { ...anomali, sudahTercatat, polaPlaceholder };
-      });
-
-      // Catatan dicari berdasarkan NIP yang relevan ke perbandingan SAAT INI (bukan pasangan batch
-      // A/B-nya) - supaya alasan yang sudah diisi admin di perbandingan LAIN (mis. September 2025
-      // vs September 2026) tetap kelihatan di sini kalau NIP-nya sama (mis. Agustus vs September).
-      const nipUtamaBaru = perbandingan.orangBaru.map((p) => p.nip);
-      const nipUtamaHilang = perbandingan.orangHilang.map((p) => p.nip);
-      const nipUtamaAnomaliList = perbandingan.nipAnomali.map((anomali) => nipUtamaAnomali(anomali));
-      const semuaNipUtamaRelevan = [...nipUtamaBaru, ...nipUtamaHilang, ...nipUtamaAnomaliList];
-
-      const catatanTersimpan = await prisma.catatanPerubahanBatch.findMany({
-        where: { nipUtama: { in: semuaNipUtamaRelevan } },
-        select: { kategori: true, nipUtama: true, alasan: true },
-      });
-
-      hasilUntukUi = { ...perbandingan, nipAnomali, catatanTersimpan };
-    }
-  }
+  const hasilUntukUi = a && b ? await hitungPerbandinganBatch(a, b) : null;
 
   return (
     <div className="space-y-6">
@@ -152,6 +73,14 @@ export default async function BandingkanPage({
         >
           Bandingkan
         </button>
+        {hasilUntukUi && a && b && (
+          <a
+            href={`/bandingkan/export?a=${a}&b=${b}`}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Unduh .xlsx
+          </a>
+        )}
       </form>
 
       {hasilUntukUi && a && b && (

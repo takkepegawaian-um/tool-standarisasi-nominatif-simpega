@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 
-import type { AnomaliNip, PegawaiRingkas } from "@/lib/domain/bandingkanBatch";
+import type { PegawaiRingkas } from "@/lib/domain/bandingkanBatch";
 import { nipUtamaAnomali } from "@/lib/domain/bandingkanBatch";
+import type { AnomaliTampil } from "@/lib/services/bandingkanBatchService";
 
 import { simpanCatatanPerubahan } from "./catatanActions";
 
-export type AnomaliTampil = AnomaliNip & { sudahTercatat: boolean; polaPlaceholder: boolean };
+export type { AnomaliTampil };
 
 const SARAN_ALASAN: Record<"Baru" | "Hilang" | "Anomali", string[]> = {
   Baru: ["Pegawai baru", "Mutasi masuk", "Alih status kepegawaian"],
