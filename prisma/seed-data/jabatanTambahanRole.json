@@ -403,5 +403,9 @@
   { "kode": "JBT-86", "namaRole": "Ketua Bidang Pengawasan SDM", "berlakuUntuk": "Dosen" },
   { "kode": "JBT-87", "namaRole": "Ketua Bidang Pengawasan SDM, Sarpras dan Aset", "berlakuUntuk": "Dosen" },
   { "kode": "JBT-88", "namaRole": "Ketua Bidang Pengawasan Keuangan", "berlakuUntuk": "Dosen" },
-  { "kode": "JBT-89", "namaRole": "Kepala Seksi Kinerja, Disiplin, dan Sistem Informasi Sumber Daya Manusia", "berlakuUntuk": "Tendik" }
+  { "kode": "JBT-89", "namaRole": "Kepala Seksi Kinerja, Disiplin, dan Sistem Informasi Sumber Daya Manusia", "berlakuUntuk": "Tendik" },
+  { "kode": "JBT-90", "namaRole": "Ketua Bidang Standar Mutu", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-91", "namaRole": "Ketua Bidang Peningkatan Mutu", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-92", "namaRole": "Ketua Bidang Implementasi dan Evaluasi Mutu", "berlakuUntuk": "Dosen" },
+  { "kode": "JBT-93", "namaRole": "Ketua Bidang Akreditasi", "berlakuUntuk": "Dosen" }
 ]

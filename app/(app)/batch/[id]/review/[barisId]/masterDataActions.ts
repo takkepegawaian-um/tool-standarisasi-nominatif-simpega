@@ -70,3 +70,42 @@ export async function tambahUnitAsal(
 
   return { kode: created.kode, nama: created.nama };
 }
+
+// Menambah Program Studi baru ke master LOKAL tool ini - dipakai saat target Jabatan Tambahan
+// (mis. "Ketua Program Studi S1 Ilmu Sejarah") adalah prodi yang belum ada di master. Sebelumnya
+// admin terpaksa menyimpannya sbg Unit Asal (tombol "Tambah unit" satu-satunya jalan), sehingga
+// prodi masuk tabel yang salah dan namanya tidak cocok dgn master Program Studi di KDS2.
+// unitAsalKode = fakultas/sekolah induk prodi (foreign key wajib di skema mst_program_studi).
+export async function tambahProgramStudi(
+  nama: string,
+  jenjang: string,
+  unitAsalKode: string
+): Promise<{ kode: string; nama: string }> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Sesi login sudah habis, silakan masuk ulang.");
+
+  const trimmed = nama.trim();
+  if (!trimmed) throw new Error("Nama program studi tidak boleh kosong.");
+  if (!jenjang.trim()) throw new Error("Jenjang wajib dipilih.");
+
+  const indukValid = await prisma.unitAsal.findUnique({ where: { kode: unitAsalKode } });
+  if (!indukValid) throw new Error("Fakultas/unit induk prodi tidak valid.");
+
+  const existing = await prisma.programStudi.findFirst({
+    where: { nama: { equals: trimmed, mode: "insensitive" } },
+  });
+  if (existing) return { kode: existing.kode, nama: existing.nama };
+
+  const semua = await prisma.programStudi.findMany({ select: { kode: true } });
+  const maxNum = semua.reduce((max, r) => {
+    const m = r.kode.match(/^PRD-(\d+)$/);
+    return m ? Math.max(max, Number(m[1])) : max;
+  }, 0);
+  const kode = `PRD-${String(maxNum + 1).padStart(3, "0")}`;
+
+  const created = await prisma.programStudi.create({
+    data: { kode, nama: trimmed, jenjang: jenjang.trim(), unitAsalKode, statusValidasi: "Draft" },
+  });
+
+  return { kode: created.kode, nama: created.nama };
+}

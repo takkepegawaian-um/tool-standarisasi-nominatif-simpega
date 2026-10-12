@@ -931,5 +931,12 @@
   { "kode": "UA-210", "nama": "Asrama Tulip, Kampus Induk UM", "unitIndukKode": "UI-08" },
   { "kode": "UA-211", "nama": "Asrama Soka dan Lily, Kampus Induk UM", "unitIndukKode": "UI-08" },
   { "kode": "UA-212", "nama": "Bistrovia", "unitIndukKode": "UI-18" },
-  { "kode": "UA-213", "nama": "Pusat Unggulan IPTEKS Disruptive Learning Innovation (DLI)", "unitIndukKode": "UI-04" }
+  { "kode": "UA-213", "nama": "Pusat Unggulan IPTEKS Disruptive Learning Innovation (DLI)", "unitIndukKode": "UI-04" },
+  { "kode": "UA-214", "nama": "S1 Pendidikan Sosiologi", "unitIndukKode": "UI-13" },
+  { "kode": "UA-215", "nama": "S1 Ilmu Perpustakaan", "unitIndukKode": "UI-17" },
+  { "kode": "UA-216", "nama": "S2 Psikologi", "unitIndukKode": "UI-16" },
+  { "kode": "UA-217", "nama": "S1 Pendidikan Pancasila dan Kewarganegaraan", "unitIndukKode": "UI-13" },
+  { "kode": "UA-218", "nama": "Pendidikan Ilmu Pengetahuan Sosial", "unitIndukKode": "UI-13" },
+  { "kode": "UA-219", "nama": "Pendidikan Profesi Bidan", "unitIndukKode": "UI-14" },
+  { "kode": "UA-220", "nama": "Profesi Ners", "unitIndukKode": "UI-14" }
 ]
