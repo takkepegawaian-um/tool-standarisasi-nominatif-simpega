@@ -85,21 +85,26 @@ export async function resolveBarisBermasalah(
       statusPengangkatan,
     });
 
-    // Slot kedua HANYA relevan kalau slot pertama juga dicentang (skema maks 2/bulan, tidak
-    // masuk akal punya jabatan tambahan "kedua" tanpa yang pertama).
-    if (formData.get("adaJabatanTambahanKedua") === "on") {
-      const roleKode2 = String(formData.get("jabatanTambahanRoleKode2") ?? "").trim();
-      const targetKode2 = String(formData.get("jabatanTambahanTargetKode2") ?? "").trim();
-      const statusPengangkatan2 = String(formData.get("statusPengangkatan2") ?? "").trim();
-      if (!roleKode2 || !targetKode2 || !statusPengangkatan2) {
-        return { error: "Jabatan Tambahan Kedua dicentang tapi role/unit-prodi/status pengangkatan belum lengkap dipilih." };
+    // Slot ke-2 dan ke-3 (skema maks MAKS_JABATAN_TAMBAHAN/bulan) HANYA relevan kalau slot sebelumnya
+    // juga dicentang - tidak masuk akal punya jabatan "ketiga" tanpa yang kedua, dst.
+    const centangLanjutan = [
+      { nomor: 2, nama: "Kedua", centang: "adaJabatanTambahanKedua" },
+      { nomor: 3, nama: "Ketiga", centang: "adaJabatanTambahanKetiga" },
+    ];
+    for (const { nomor, nama, centang } of centangLanjutan) {
+      if (formData.get(centang) !== "on") break;
+      const roleKodeN = String(formData.get(`jabatanTambahanRoleKode${nomor}`) ?? "").trim();
+      const targetKodeN = String(formData.get(`jabatanTambahanTargetKode${nomor}`) ?? "").trim();
+      const statusPengangkatanN = String(formData.get(`statusPengangkatan${nomor}`) ?? "").trim();
+      if (!roleKodeN || !targetKodeN || !statusPengangkatanN) {
+        return { error: `Jabatan Tambahan ${nama} dicentang tapi role/unit-prodi/status pengangkatan belum lengkap dipilih.` };
       }
-      const [targetTipe2, targetId2] = targetKode2.split(":");
+      const [targetTipeN, targetIdN] = targetKodeN.split(":");
       jabatanTambahanSlots.push({
-        jabatanTambahanRoleKode: roleKode2,
-        unitAsalKode: targetTipe2 === "UNIT" ? targetId2 : null,
-        programStudiKode: targetTipe2 === "PRODI" ? targetId2 : null,
-        statusPengangkatan: statusPengangkatan2,
+        jabatanTambahanRoleKode: roleKodeN,
+        unitAsalKode: targetTipeN === "UNIT" ? targetIdN : null,
+        programStudiKode: targetTipeN === "PRODI" ? targetIdN : null,
+        statusPengangkatan: statusPengangkatanN,
       });
     }
   }

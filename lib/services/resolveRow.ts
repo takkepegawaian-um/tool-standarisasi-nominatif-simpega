@@ -226,7 +226,7 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
         update: { nilaiResolusi: input.data.unitAsalKode },
       });
     }
-    // Kamus menyimpan SEMUA slot (maks 2) dlm 1 string - kalau cuma slot pertama, bulan depan baris
+    // Kamus menyimpan SEMUA slot (maks 3) dlm 1 string - kalau cuma slot pertama, bulan depan baris
     // yang sama (teks mentah sama) kehilangan jabatan keduanya lagi.
     if (input.ingat.jabatanTambahan && jabatanTambahan.length > 0) {
       const nilai = encodeJabatanTambahan(jabatanTambahan);

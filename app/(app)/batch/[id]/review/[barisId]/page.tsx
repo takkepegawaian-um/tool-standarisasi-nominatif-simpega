@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import {
-  pisahJabatanTambahanRaw,
+  uraiJabatanTambahanSebagian,
   resolveGolongan,
   resolveJabatan,
   resolveJabatanTambahan,
@@ -17,7 +17,6 @@ import {
   kunciIdentitasEksternal,
 } from "@/lib/domain/identitasEksternal";
 import { loadKamusMap, loadMasterCache, loadNipTerdaftar } from "@/lib/domain/masterCache";
-import { exactMatch } from "@/lib/domain/matching";
 import { prisma } from "@/lib/db";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
@@ -158,47 +157,35 @@ export default async function ResolveRowPage({
   }
 
   let prefillAdaJabatanTambahan = false;
-  let prefillJabatanTambahanRoleKode: string | null = null;
-  let prefillJabatanTambahanTargetKode: string | null = null;
-  let prefillStatusPengangkatan: string | null = null;
-  let prefillAdaJabatanTambahanKedua = false;
-  let prefillJabatanTambahanRoleKode2: string | null = null;
-  let prefillJabatanTambahanTargetKode2: string | null = null;
-  let prefillStatusPengangkatan2: string | null = null;
+  let slotsPrefill: { roleKode: string | null; targetKode: string | null; status: string | null }[] = [];
+
+  const targetKode = (s: { unitAsalKode: string | null; programStudiKode: string | null }) =>
+    s.unitAsalKode ? `UNIT:${s.unitAsalKode}` : s.programStudiKode ? `PRODI:${s.programStudiKode}` : null;
 
   if (prefillKelompok && prefillKelompok !== "Akademisi Luar UM" && rawEfektif.jabatanTambahanRaw.trim()) {
     prefillAdaJabatanTambahan = true;
     const jt = resolveJabatanTambahan(rawEfektif, master, kamus, prefillKelompok);
     if ("slots" in jt && jt.slots.length > 0) {
-      const [slot, slotKedua] = jt.slots;
-      prefillJabatanTambahanRoleKode = slot.jabatanTambahanRoleKode;
-      prefillJabatanTambahanTargetKode = slot.unitAsalKode
-        ? `UNIT:${slot.unitAsalKode}`
-        : slot.programStudiKode
-          ? `PRODI:${slot.programStudiKode}`
-          : null;
-      prefillStatusPengangkatan = slot.statusPengangkatan;
-      if (slotKedua) {
-        prefillAdaJabatanTambahanKedua = true;
-        prefillJabatanTambahanRoleKode2 = slotKedua.jabatanTambahanRoleKode;
-        prefillJabatanTambahanTargetKode2 = slotKedua.unitAsalKode
-          ? `UNIT:${slotKedua.unitAsalKode}`
-          : slotKedua.programStudiKode
-            ? `PRODI:${slotKedua.programStudiKode}`
-            : null;
-        prefillStatusPengangkatan2 = slotKedua.statusPengangkatan;
-      }
+      slotsPrefill = jt.slots.map((s) => ({
+        roleKode: s.jabatanTambahanRoleKode,
+        targetKode: targetKode(s),
+        status: s.statusPengangkatan,
+      }));
     } else {
-      // Kamus belum tahu Status Pengangkatan-nya, tapi role & unit/prodi mungkin tetap bisa
-      // di-prefill dari pencocokan langsung supaya admin tidak perlu cari manual dari nol.
-      const { roleRaw, unit: u, prodi, status } = pisahJabatanTambahanRaw(rawEfektif.jabatanTambahanRaw, master);
-      const role = exactMatch(master.jabatanTambahanRole, (r) => r.namaRole, roleRaw);
-      if (role) prefillJabatanTambahanRoleKode = role.kode;
-      if (u) prefillJabatanTambahanTargetKode = `UNIT:${u.kode}`;
-      else if (prodi) prefillJabatanTambahanTargetKode = `PRODI:${prodi.kode}`;
-      if (status) prefillStatusPengangkatan = status;
+      // Resolver otomatis gagal/menolak (mis. 3+ jabatan atau 1 jabatan tak bisa dipetakan): isi
+      // sebisanya per jabatan dari pencocokan langsung supaya admin tinggal melengkapi, bukan
+      // mencari dari nol. Hanya sampai MAKS_JABATAN_TAMBAHAN jabatan pertama.
+      slotsPrefill = uraiJabatanTambahanSebagian(rawEfektif.jabatanTambahanRaw, master).map((s) => ({
+        roleKode: s.roleKode,
+        targetKode: targetKode(s),
+        status: s.status,
+      }));
     }
   }
+  const [slotPertama, ...slotLanjutan] = slotsPrefill;
+  const prefillJabatanTambahanRoleKode = slotPertama?.roleKode ?? null;
+  const prefillJabatanTambahanTargetKode = slotPertama?.targetKode ?? null;
+  const prefillStatusPengangkatan = slotPertama?.status ?? null;
 
   return (
     <div className="space-y-6">
@@ -261,10 +248,7 @@ export default async function ResolveRowPage({
           jabatanTambahanRoleKode: prefillJabatanTambahanRoleKode,
           jabatanTambahanTargetKode: prefillJabatanTambahanTargetKode,
           statusPengangkatan: prefillStatusPengangkatan,
-          adaJabatanTambahanKedua: prefillAdaJabatanTambahanKedua,
-          jabatanTambahanRoleKode2: prefillJabatanTambahanRoleKode2,
-          jabatanTambahanTargetKode2: prefillJabatanTambahanTargetKode2,
-          statusPengangkatan2: prefillStatusPengangkatan2,
+          slotLanjutan,
         }}
         master={{
           statusKepegawaian: master.statusKepegawaian,

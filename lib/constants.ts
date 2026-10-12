@@ -61,6 +61,11 @@ export const JENIS_FIELD_KAMUS = [
 ] as const;
 export type JenisFieldKamus = (typeof JENIS_FIELD_KAMUS)[number];
 
+/** Batas jumlah Jabatan Tambahan per pegawai per bulan. Naik dari 2 ke 3 (Okt 2026) krn ada
+ *  dosen yang merangkap Ketua Departemen + 2 Ketua Prodi / Kepala Lab sekaligus. Export Nominatif
+ *  punya 3 blok kolom (Jabatan Tambahan 1-3) sesuai batas ini - ubah bersamaan kalau angkanya berubah. */
+export const MAKS_JABATAN_TAMBAHAN = 3;
+
 export const STATUS_PENGANGKATAN = ["Definitif", "Plt", "Pjs"] as const;
 export type StatusPengangkatan = (typeof STATUS_PENGANGKATAN)[number];
 

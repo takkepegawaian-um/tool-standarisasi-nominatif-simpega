@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 
-import { STATUS_PENGANGKATAN } from "@/lib/constants";
+import { MAKS_JABATAN_TAMBAHAN, STATUS_PENGANGKATAN } from "@/lib/constants";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
 import { resolveBarisBermasalah, type ResolveState } from "./actions";
@@ -34,10 +34,8 @@ type Prefill = {
   jabatanTambahanRoleKode: string | null;
   jabatanTambahanTargetKode: string | null;
   statusPengangkatan: string | null;
-  adaJabatanTambahanKedua: boolean;
-  jabatanTambahanRoleKode2: string | null;
-  jabatanTambahanTargetKode2: string | null;
-  statusPengangkatan2: string | null;
+  /** Jabatan Tambahan ke-2 dan ke-3 (urut) - panjang 0..2, slot 1 ada di field di atas. */
+  slotLanjutan: { roleKode: string | null; targetKode: string | null; status: string | null }[];
 };
 
 /**
@@ -85,7 +83,8 @@ export function ResolveForm({
   const [state, formAction] = useActionState<ResolveState, FormData>(boundAction, {});
   const [kelompok, setKelompok] = useState(prefill.kelompok ?? "Tendik");
   const [adaJabatanTambahan, setAdaJabatanTambahan] = useState(prefill.adaJabatanTambahan);
-  const [adaJabatanTambahanKedua, setAdaJabatanTambahanKedua] = useState(prefill.adaJabatanTambahanKedua);
+  const [adaJabatanTambahanKedua, setAdaJabatanTambahanKedua] = useState(prefill.slotLanjutan.length >= 1);
+  const [adaJabatanTambahanKetiga, setAdaJabatanTambahanKetiga] = useState(prefill.slotLanjutan.length >= 2);
   // Role yang baru ditambah lewat "+ Tambah ... sebagai jabatan tambahan baru" langsung masuk
   // sini supaya bisa dipilih tanpa reload - master data SEBENARNYA (Prisma) sudah diperbarui
   // oleh server action-nya sendiri, ini cuma salinan lokal utk render ulang daftar opsi.
@@ -123,6 +122,63 @@ export function ResolveForm({
     } finally {
       setUnitBaruSaving(false);
     }
+  }
+
+  // Slot Jabatan Tambahan ke-2 dan ke-3 identik (beda nama field: ...2/...3) - satu fungsi utk
+  // dua-duanya supaya tidak menyalin ~70 baris markup.
+  function renderSlotLanjutan(nomor: 2 | 3) {
+    const nama = nomor === 2 ? "Kedua" : "Ketiga";
+    const awal = prefill.slotLanjutan[nomor - 2];
+    return (
+      <div key={nomor} className="space-y-3 rounded-md border border-slate-200 p-3">
+        <div>
+          <label className="block text-sm font-medium text-slate-700">Jabatan Tambahan {nama}</label>
+          <SearchableSelect
+            key={kelompok}
+            name={`jabatanTambahanRoleKode${nomor}`}
+            defaultValue={awal?.roleKode ?? ""}
+            placeholder="Cari jabatan tambahan..."
+            options={[...master.jabatanTambahanRole, ...extraJabatanTambahanRole]
+              .filter((r) => r.berlakuUntuk === "Keduanya" || r.berlakuUntuk === kelompok)
+              .map((r) => ({ value: r.kode, label: r.namaRole }))}
+            createLabel="jabatan tambahan baru"
+            onCreateOption={async (query) => {
+              const created = await tambahJabatanTambahanRole(query, kelompok as "Dosen" | "Tendik");
+              setExtraJabatanTambahanRole((prev) => [...prev, { ...created, berlakuUntuk: kelompok }]);
+              return { value: created.kode, label: created.namaRole };
+            }}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">Unit/Prodi Jabatan Tambahan {nama}</label>
+          <SearchableSelect
+            name={`jabatanTambahanTargetKode${nomor}`}
+            defaultValue={awal?.targetKode ?? ""}
+            placeholder="Cari unit/prodi..."
+            options={[
+              ...master.unitAsal.map((u) => ({ value: `UNIT:${u.kode}`, label: u.nama, group: "Unit Asal" })),
+              ...extraUnitAsal.map((u) => ({ value: `UNIT:${u.kode}`, label: u.nama, group: "Unit Asal" })),
+              ...master.programStudi.map((p) => ({ value: `PRODI:${p.kode}`, label: p.nama, group: "Program Studi" })),
+            ]}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700">Status Pengangkatan</label>
+          <select
+            name={`statusPengangkatan${nomor}`}
+            defaultValue={awal?.status ?? ""}
+            className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+          >
+            <option value="">Pilih status pengangkatan...</option>
+            {STATUS_PENGANGKATAN.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -468,81 +524,29 @@ export function ResolveForm({
                   type="checkbox"
                   name="adaJabatanTambahanKedua"
                   checked={adaJabatanTambahanKedua}
-                  onChange={(e) => setAdaJabatanTambahanKedua(e.target.checked)}
+                  onChange={(e) => {
+                    setAdaJabatanTambahanKedua(e.target.checked);
+                    if (!e.target.checked) setAdaJabatanTambahanKetiga(false);
+                  }}
                 />
-                Punya Jabatan Tambahan Kedua (maks 2 per bulan)
+                Punya Jabatan Tambahan Kedua (maks {MAKS_JABATAN_TAMBAHAN} per bulan)
               </label>
 
+              {adaJabatanTambahanKedua && renderSlotLanjutan(2)}
+
               {adaJabatanTambahanKedua && (
-                <div className="space-y-3 rounded-md border border-slate-200 p-3">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">Jabatan Tambahan Kedua</label>
-                    <SearchableSelect
-                      key={kelompok}
-                      name="jabatanTambahanRoleKode2"
-                      defaultValue={prefill.jabatanTambahanRoleKode2 ?? ""}
-                      placeholder="Cari jabatan tambahan..."
-                      options={[...master.jabatanTambahanRole, ...extraJabatanTambahanRole]
-                        .filter((r) => r.berlakuUntuk === "Keduanya" || r.berlakuUntuk === kelompok)
-                        .map((r) => ({ value: r.kode, label: r.namaRole }))}
-                      createLabel="jabatan tambahan baru"
-                      onCreateOption={async (query) => {
-                        const created = await tambahJabatanTambahanRole(
-                          query,
-                          kelompok as "Dosen" | "Tendik"
-                        );
-                        setExtraJabatanTambahanRole((prev) => [
-                          ...prev,
-                          { ...created, berlakuUntuk: kelompok },
-                        ]);
-                        return { value: created.kode, label: created.namaRole };
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">
-                      Unit/Prodi Jabatan Tambahan Kedua
-                    </label>
-                    <SearchableSelect
-                      name="jabatanTambahanTargetKode2"
-                      defaultValue={prefill.jabatanTambahanTargetKode2 ?? ""}
-                      placeholder="Cari unit/prodi..."
-                      options={[
-                        ...master.unitAsal.map((u) => ({
-                          value: `UNIT:${u.kode}`,
-                          label: u.nama,
-                          group: "Unit Asal",
-                        })),
-                        ...extraUnitAsal.map((u) => ({
-                          value: `UNIT:${u.kode}`,
-                          label: u.nama,
-                          group: "Unit Asal",
-                        })),
-                        ...master.programStudi.map((p) => ({
-                          value: `PRODI:${p.kode}`,
-                          label: p.nama,
-                          group: "Program Studi",
-                        })),
-                      ]}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700">Status Pengangkatan</label>
-                    <select
-                      name="statusPengangkatan2"
-                      defaultValue={prefill.statusPengangkatan2 ?? ""}
-                      className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                    >
-                      <option value="">Pilih status pengangkatan...</option>
-                      {STATUS_PENGANGKATAN.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    name="adaJabatanTambahanKetiga"
+                    checked={adaJabatanTambahanKetiga}
+                    onChange={(e) => setAdaJabatanTambahanKetiga(e.target.checked)}
+                  />
+                  Punya Jabatan Tambahan Ketiga
+                </label>
               )}
+
+              {adaJabatanTambahanKedua && adaJabatanTambahanKetiga && renderSlotLanjutan(3)}
             </div>
           )}
         </div>

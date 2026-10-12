@@ -1,4 +1,4 @@
-import type { AlasanBarisBermasalah, KelompokPegawai } from "@/lib/constants";
+import { MAKS_JABATAN_TAMBAHAN, type AlasanBarisBermasalah, type KelompokPegawai } from "@/lib/constants";
 import type { RawNominatifRow } from "@/lib/excel/types";
 
 import type { KamusMap, MasterCache, NipTerdaftar } from "./masterCache";
@@ -39,7 +39,7 @@ export type ResolvedNominatif = {
   kategoriAkademisiLuarKode: string | null;
   unitAsalKode: string;
   tanggalMulaiKerja: Date;
-  /** Array, bukan single - skema mendukung maks 2 Jabatan Tambahan/bulan (lihat
+  /** Array, bukan single - skema mendukung maks 3 (MAKS_JABATAN_TAMBAHAN) Jabatan Tambahan/bulan (lihat
    * cobaPecahDuaJabatanTambahan), array kosong = tidak punya jabatan tambahan. */
   jabatanTambahan: JabatanTambahanSlot[];
 };
@@ -109,7 +109,7 @@ export const kunciJabatanTambahan = (row: Pick<RawNominatifRow, "jabatanTambahan
 /**
  * Kamus koreksi menyimpan 1 String per entri, jadi resolusi Jabatan Tambahan (role + unit/prodi
  * + status pengangkatan sekaligus) di-encode jadi 1 string komposit "role|target|status". Kalau
- * orangnya punya 2 jabatan tambahan, kedua slot digabung dgn ";" ("slot1;slot2") - entri lama
+ * orangnya punya >1 jabatan tambahan, slot-slotnya digabung dgn ";" ("slot1;slot2;slot3") - entri lama
  * 1 slot (tanpa ";") tetap terbaca persis seperti sebelumnya.
  */
 function encodeSatuSlot(slot: JabatanTambahanSlot): string {
@@ -139,7 +139,7 @@ function decodeSatuSlot(encoded: string): JabatanTambahanSlot | null {
 
 function decodeJabatanTambahan(encoded: string): JabatanTambahanSlot[] | null {
   const slots = encoded.split(";").map(decodeSatuSlot);
-  if (slots.length === 0 || slots.length > 2 || slots.some((s) => s === null)) return null;
+  if (slots.length === 0 || slots.length > MAKS_JABATAN_TAMBAHAN || slots.some((s) => s === null)) return null;
   return slots as JabatanTambahanSlot[];
 }
 
@@ -802,6 +802,43 @@ function cariPemisahJabatan(teks: string, master: MasterCache): { awal: number; 
   return hasil;
 }
 
+function potongPerPemisah(teks: string, pemisah: { awal: number; akhir: number }[]): string[] {
+  const bagian: string[] = [];
+  let mulai = 0;
+  for (const p of pemisah) {
+    bagian.push(teks.slice(mulai, p.awal));
+    mulai = p.akhir;
+  }
+  bagian.push(teks.slice(mulai));
+  return bagian;
+}
+
+/**
+ * Untuk PRATINJAU/prefill form resolve manual (bukan keputusan otomatis): pecah teks di tiap
+ * pemisah jabatan lalu isi sebisanya role & target tiap bagian - bagian yang gagal cocok tetap
+ * dikembalikan (role/target null) supaya admin tinggal melengkapi, bukan mulai dari kosong.
+ */
+export function uraiJabatanTambahanSebagian(
+  raw: string,
+  master: MasterCache
+): { roleKode: string | null; unitAsalKode: string | null; programStudiKode: string | null; status: string }[] {
+  const teks = raw.replace(/\s+/g, " ").trim();
+  if (!teks) return [];
+  const pemisah = diawaliNamaRole(teks, master) ? cariPemisahJabatan(teks, master) : [];
+  return potongPerPemisah(teks, pemisah)
+    .slice(0, MAKS_JABATAN_TAMBAHAN)
+    .map((b) => {
+      const { roleRaw, unit, prodi, status } = pisahJabatanTambahanRaw(b, master);
+      const role = exactMatch(master.jabatanTambahanRole, (r) => r.namaRole, roleRaw);
+      return {
+        roleKode: role?.kode ?? null,
+        unitAsalKode: unit?.kode ?? null,
+        programStudiKode: prodi?.kode ?? null,
+        status: status ?? "Definitif",
+      };
+    });
+}
+
 /**
  * Jabatan Tambahan opsional - kosong di data sumber = tidak menjabat, bukan error. Akademisi
  * Luar UM tidak pernah punya jabatan tambahan struktural. Status Pengangkatan: kalau teksnya
@@ -843,20 +880,20 @@ export function resolveJabatanTambahan(
   const teks = row.jabatanTambahanRaw.replace(/\s+/g, " ").trim();
   if (diawaliNamaRole(teks, master)) {
     const pemisah = cariPemisahJabatan(teks, master);
-    if (pemisah.length >= 2) {
+    if (pemisah.length + 1 > MAKS_JABATAN_TAMBAHAN) {
       return {
         issue: {
           alasan: "JabatanTambahanTidakDikenali",
-          detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" memuat ${pemisah.length + 1} jabatan, sedangkan skema hanya mendukung maks 2 per bulan - perlu keputusan manual jabatan mana yang dicatat.`,
+          detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" memuat ${pemisah.length + 1} jabatan, sedangkan skema hanya mendukung maks ${MAKS_JABATAN_TAMBAHAN} per bulan - perlu keputusan manual jabatan mana yang dicatat.`,
         },
       };
     }
-    if (pemisah.length === 1) {
-      const kiri = uraiSatuJabatanTambahan(teks.slice(0, pemisah[0].awal), master);
-      const kanan = uraiSatuJabatanTambahan(teks.slice(pemisah[0].akhir), master);
-      if (kiri && kanan) {
+    if (pemisah.length >= 1) {
+      const bagian = potongPerPemisah(teks, pemisah);
+      const terurai = bagian.map((b) => uraiSatuJabatanTambahan(b, master));
+      if (terurai.every((t): t is SatuJabatanTambahanTerurai => t !== null)) {
         return {
-          slots: [kiri, kanan].map((p) => ({
+          slots: terurai.map((p) => ({
             jabatanTambahanRoleKode: p.role.kode,
             unitAsalKode: p.unit?.kode ?? null,
             programStudiKode: p.prodi?.kode ?? null,
@@ -867,7 +904,7 @@ export function resolveJabatanTambahan(
       return {
         issue: {
           alasan: "JabatanTambahanTidakDikenali",
-          detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" memuat 2 jabatan, tapi salah satunya tidak bisa dipetakan lengkap (role + unit/prodi) ke master.`,
+          detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" memuat ${bagian.length} jabatan, tapi salah satunya tidak bisa dipetakan lengkap (role + unit/prodi) ke master.`,
         },
       };
     }

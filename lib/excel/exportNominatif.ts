@@ -65,7 +65,35 @@ export async function generateNominatifExport(uploadBatchId: string): Promise<Bu
   const sheet = workbook.getWorksheet(SHEET_NAME);
   if (!sheet) throw new Error(`Sheet "${SHEET_NAME}" tidak ditemukan di template ekspor.`);
 
-  sheet.getRow(1).getCell(20).value = "Catatan (Bandingkan Batch)";
+  // Template resmi cuma punya 2 blok Jabatan Tambahan (kolom 14-19). Blok ke-3 (kolom 20-22) dan
+  // "Catatan (Bandingkan Batch)" (kolom 23) ditambah SETELAHNYA saat generate, gaya header disalin
+  // dari kolom 19 supaya seragam. Kolom 1-19 TIDAK berubah. KDS2 membaca kolom BY NAMA header.
+  const headerBaru: [number, string, number][] = [
+    [20, "Jabatan Tambahan 3", 20],
+    [21, "Unit/Prodi Jabatan Tambahan 3", 22],
+    [22, "Status Pengangkatan 3", 14],
+    [23, "Catatan (Bandingkan Batch)", 30],
+  ];
+  const sel19 = sheet.getRow(1).getCell(19);
+  for (const [kolom, teks, lebar] of headerBaru) {
+    const sel = sheet.getRow(1).getCell(kolom);
+    sel.value = teks;
+    sel.style = { ...sel19.style };
+    sheet.getColumn(kolom).width = lebar;
+  }
+
+  // Lembar "Petunjuk Pengisian" menyebut "1 & 2" - sesuaikan teksnya ke 3 slot (best-effort).
+  const petunjuk = workbook.getWorksheet("Petunjuk Pengisian");
+  petunjuk?.eachRow((r) => {
+    const sel = r.getCell(1);
+    if (typeof sel.value === "string" && /^(Unit\/Prodi )?(Jabatan Tambahan|Status Pengangkatan) 1 & 2$/.test(sel.value)) {
+      sel.value = sel.value.replace("1 & 2", "1, 2 & 3");
+    }
+    const ket = r.getCell(4);
+    if (typeof ket.value === "string" && ket.value.includes("Slot ke-2 untuk kasus rangkap 2 jabatan")) {
+      ket.value = ket.value.replace("Slot ke-2 untuk kasus rangkap 2 jabatan", "Slot ke-2 dan ke-3 untuk kasus rangkap 2-3 jabatan");
+    }
+  });
 
   // Baris contoh/catatan bawaan template (baris 2 dst) DITIMPA langsung, bukan dihapus dulu -
   // `spliceRows` exceljs punya bug off-by-one saat count-nya pas mencapai baris terakhir sheet
@@ -77,6 +105,7 @@ export async function generateNominatifExport(uploadBatchId: string): Promise<Bu
   rows.forEach((row, idx) => {
     const slot1 = row.jabatanTambahan[0];
     const slot2 = row.jabatanTambahan[1];
+    const slot3 = row.jabatanTambahan[2];
 
     sheet.getRow(idx + 2).values = [
       row.pegawaiNip,
@@ -98,6 +127,9 @@ export async function generateNominatifExport(uploadBatchId: string): Promise<Bu
       slot2?.jabatanTambahanRole.namaRole ?? "",
       slot2?.unitAsal?.nama ?? slot2?.programStudi?.nama ?? "",
       slot2?.statusPengangkatan ?? "",
+      slot3?.jabatanTambahanRole.namaRole ?? "",
+      slot3?.unitAsal?.nama ?? slot3?.programStudi?.nama ?? "",
+      slot3?.statusPengangkatan ?? "",
       catatanPerNip.get(row.pegawaiNip) ?? "",
     ];
   });
