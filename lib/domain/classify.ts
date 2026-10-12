@@ -108,9 +108,11 @@ export const kunciJabatanTambahan = (row: Pick<RawNominatifRow, "jabatanTambahan
 
 /**
  * Kamus koreksi menyimpan 1 String per entri, jadi resolusi Jabatan Tambahan (role + unit/prodi
- * + status pengangkatan sekaligus) di-encode jadi 1 string komposit "role|target|status".
+ * + status pengangkatan sekaligus) di-encode jadi 1 string komposit "role|target|status". Kalau
+ * orangnya punya 2 jabatan tambahan, kedua slot digabung dgn ";" ("slot1;slot2") - entri lama
+ * 1 slot (tanpa ";") tetap terbaca persis seperti sebelumnya.
  */
-export function encodeJabatanTambahan(slot: JabatanTambahanSlot): string {
+function encodeSatuSlot(slot: JabatanTambahanSlot): string {
   const target = slot.unitAsalKode
     ? `UNIT:${slot.unitAsalKode}`
     : slot.programStudiKode
@@ -119,7 +121,11 @@ export function encodeJabatanTambahan(slot: JabatanTambahanSlot): string {
   return `${slot.jabatanTambahanRoleKode}|${target}|${slot.statusPengangkatan}`;
 }
 
-function decodeJabatanTambahan(encoded: string): JabatanTambahanSlot | null {
+export function encodeJabatanTambahan(slots: JabatanTambahanSlot[]): string {
+  return slots.map(encodeSatuSlot).join(";");
+}
+
+function decodeSatuSlot(encoded: string): JabatanTambahanSlot | null {
   const parts = encoded.split("|");
   if (parts.length !== 3) return null;
   const [roleKode, target, statusPengangkatan] = parts;
@@ -129,6 +135,12 @@ function decodeJabatanTambahan(encoded: string): JabatanTambahanSlot | null {
     programStudiKode: target.startsWith("PRODI:") ? target.slice(6) : null,
     statusPengangkatan,
   };
+}
+
+function decodeJabatanTambahan(encoded: string): JabatanTambahanSlot[] | null {
+  const slots = encoded.split(";").map(decodeSatuSlot);
+  if (slots.length === 0 || slots.length > 2 || slots.some((s) => s === null)) return null;
+  return slots as JabatanTambahanSlot[];
 }
 
 function dariKamus(kamus: KamusMap, jenisField: string, kunci: string): string | undefined {
@@ -737,30 +749,34 @@ function uraiSatuJabatanTambahan(mentah: string, master: MasterCache): SatuJabat
   return { role: { kode: role.kode }, unit, prodi, status: status ?? "Definitif" };
 }
 
+/** Teks (setelah awalan "Plt."/"Pjs." dibuang) diawali nama salah satu role master pada batas kata. */
+function diawaliNamaRole(teks: string, master: MasterCache): boolean {
+  const n = normalize(ekstrakStatusPengangkatan(teks.trim()).sisaTeks);
+  return master.jabatanTambahanRole.some((r) => {
+    const roleNorm = normalize(r.namaRole);
+    if (!n.startsWith(roleNorm)) return false;
+    const sisa = n.slice(roleNorm.length);
+    return sisa === "" || sisa.startsWith(" ") || sisa.startsWith(",") || sisa.startsWith(":");
+  });
+}
+
 /**
- * Coba pecah "role1 ... dan role2 ..." jadi 2 Jabatan Tambahan terpisah (skema mendukung maks 2
- * slot/bulan, lihat nominatif_bulanan_jabatan_tambahan). Cari SEMUA titik " dan " di teks (bisa
- * lebih dari satu, termasuk yang cuma bagian dari nama resmi seperti "Fakultas Ekonomi dan
- * Bisnis") dan coba tiap titik sebagai kandidat batas pemisah - HANYA diterima kalau KEDUA belah
- * pihak lengkap terurai sendiri-sendiri (role+target ketemu di masing-masing bagian, bukan cuma
- * salah satu), supaya nama resmi yang kebetulan mengandung "dan" tidak akan pernah salah
- * terpotong (belah yang salah otomatis gagal terurai, jadi dicoba titik "dan" berikutnya).
+ * Cari titik-titik pemisah ANTAR jabatan di teks Jabatan Tambahan. Sumber memisahkan 2 jabatan
+ * dgn " dan " ("Plt. Sekretaris X dan Plt. Ketua Y") atau "merangkap"/"merangkap sebagai"
+ * ("Ketua Departemen X merangkap Ketua Program Studi Y" - pola ini yang terbanyak di tarikan
+ * REKAP_PEGAWAI). Sebuah " dan "/"merangkap" HANYA dihitung pemisah kalau teks SETELAHNYA diawali
+ * nama role master - jadi " dan " yang cuma bagian nama resmi ("Fakultas Ekonomi dan Bisnis",
+ * "Hukum dan Kewarganegaraan") tidak pernah dianggap pemisah. Jumlah jabatan = jumlah titik + 1.
  */
-function cobaPecahDuaJabatanTambahan(
-  raw: string,
-  master: MasterCache
-): [SatuJabatanTambahanTerurai, SatuJabatanTambahanTerurai] | null {
-  const regex = /\s+dan\s+/gi;
+function cariPemisahJabatan(teks: string, master: MasterCache): { awal: number; akhir: number }[] {
+  const regex = /\s+(?:merangkap(?:\s+sebagai)?|dan)\s+/gi;
+  const hasil: { awal: number; akhir: number }[] = [];
   let m: RegExpExecArray | null;
-  while ((m = regex.exec(raw))) {
-    const kiri = raw.slice(0, m.index).trim();
-    const kanan = raw.slice(m.index + m[0].length).trim();
-    if (!kiri || !kanan) continue;
-    const kiriUrai = uraiSatuJabatanTambahan(kiri, master);
-    const kananUrai = uraiSatuJabatanTambahan(kanan, master);
-    if (kiriUrai && kananUrai) return [kiriUrai, kananUrai];
+  while ((m = regex.exec(teks))) {
+    const akhir = m.index + m[0].length;
+    if (diawaliNamaRole(teks.slice(akhir), master)) hasil.push({ awal: m.index, akhir });
   }
-  return null;
+  return hasil;
 }
 
 /**
@@ -786,11 +802,59 @@ export function resolveJabatanTambahan(
     const decoded = decodeJabatanTambahan(diingat);
     if (
       decoded &&
-      master.jabatanTambahanRole.some((r) => r.kode === decoded.jabatanTambahanRoleKode) &&
-      (!decoded.unitAsalKode || master.unitAsal.some((u) => u.kode === decoded.unitAsalKode)) &&
-      (!decoded.programStudiKode || master.programStudi.some((p) => p.kode === decoded.programStudiKode))
+      decoded.every(
+        (s) =>
+          master.jabatanTambahanRole.some((r) => r.kode === s.jabatanTambahanRoleKode) &&
+          (!s.unitAsalKode || master.unitAsal.some((u) => u.kode === s.unitAsalKode)) &&
+          (!s.programStudiKode || master.programStudi.some((p) => p.kode === s.programStudiKode))
+      )
     ) {
-      return { slots: [decoded] };
+      return { slots: decoded };
+    }
+  }
+
+  // Teks yang MEMUAT lebih dari 1 jabatan ("X merangkap Y" / "X dan Y") dipecah DULU, sebelum
+  // jalur 1-jabatan di bawah - kalau tidak, role+unit pertama cocok duluan dan sisa teks setelahnya
+  // (jabatan kedua) terbuang diam-diam, krn pencocokan unit menerima sisa apa pun di belakang
+  // nama unit (lihat cariUnitAtauProdi).
+  const teks = row.jabatanTambahanRaw.replace(/\s+/g, " ").trim();
+  if (diawaliNamaRole(teks, master)) {
+    const pemisah = cariPemisahJabatan(teks, master);
+    if (pemisah.length >= 2) {
+      return {
+        issue: {
+          alasan: "JabatanTambahanTidakDikenali",
+          detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" memuat ${pemisah.length + 1} jabatan, sedangkan skema hanya mendukung maks 2 per bulan - perlu keputusan manual jabatan mana yang dicatat.`,
+        },
+      };
+    }
+    if (pemisah.length === 1) {
+      const kiri = uraiSatuJabatanTambahan(teks.slice(0, pemisah[0].awal), master);
+      const kanan = uraiSatuJabatanTambahan(teks.slice(pemisah[0].akhir), master);
+      if (kiri && kanan) {
+        return {
+          slots: [kiri, kanan].map((p) => ({
+            jabatanTambahanRoleKode: p.role.kode,
+            unitAsalKode: p.unit?.kode ?? null,
+            programStudiKode: p.prodi?.kode ?? null,
+            statusPengangkatan: p.status,
+          })),
+        };
+      }
+      return {
+        issue: {
+          alasan: "JabatanTambahanTidakDikenali",
+          detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" memuat 2 jabatan, tapi salah satunya tidak bisa dipetakan lengkap (role + unit/prodi) ke master.`,
+        },
+      };
+    }
+    if (/\bmerangkap\b/i.test(teks)) {
+      return {
+        issue: {
+          alasan: "JabatanTambahanTidakDikenali",
+          detail: `Jabatan Tambahan mentah "${row.jabatanTambahanRaw}" memuat kata "merangkap", tapi jabatan setelahnya bukan role yang ada di master - perlu keputusan manual (tambah role baru atau abaikan).`,
+        },
+      };
     }
   }
 
@@ -833,21 +897,6 @@ export function resolveJabatanTambahan(
         ],
       };
     }
-  }
-
-  // Gagal sebagai 1 jabatan utuh - coba pecah jadi 2 ("role1 ... dan role2 ..."), lihat
-  // cobaPecahDuaJabatanTambahan. Cuma diterima kalau KEDUA belah pihak lengkap (termasuk status
-  // eksplisit) sendiri-sendiri, jadi aman dari nama resmi yang kebetulan mengandung kata "dan".
-  const pecah = cobaPecahDuaJabatanTambahan(row.jabatanTambahanRaw, master);
-  if (pecah) {
-    return {
-      slots: pecah.map((p) => ({
-        jabatanTambahanRoleKode: p.role.kode,
-        unitAsalKode: p.unit?.kode ?? null,
-        programStudiKode: p.prodi?.kode ?? null,
-        statusPengangkatan: p.status,
-      })),
-    };
   }
 
   return {

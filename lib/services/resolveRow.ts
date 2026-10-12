@@ -226,11 +226,10 @@ export async function resolveRow(input: ResolveRowInput): Promise<void> {
         update: { nilaiResolusi: input.data.unitAsalKode },
       });
     }
-    // Form resolusi manual cuma pernah mengisi 0 atau 1 slot (lihat ResolveForm.tsx) - kamus
-    // koreksi juga cuma mengenal 1 slot per kunci, jadi cukup ambil elemen pertama saja.
-    const satuJabatanTambahan = jabatanTambahan[0] as JabatanTambahanSlot | undefined;
-    if (input.ingat.jabatanTambahan && satuJabatanTambahan) {
-      const nilai = encodeJabatanTambahan(satuJabatanTambahan);
+    // Kamus menyimpan SEMUA slot (maks 2) dlm 1 string - kalau cuma slot pertama, bulan depan baris
+    // yang sama (teks mentah sama) kehilangan jabatan keduanya lagi.
+    if (input.ingat.jabatanTambahan && jabatanTambahan.length > 0) {
+      const nilai = encodeJabatanTambahan(jabatanTambahan);
       await tx.kamusKoreksi.upsert({
         where: {
           jenisField_kunciMentah: { jenisField: "JabatanTambahan", kunciMentah: kunciJabatanTambahan(rawRow) },
