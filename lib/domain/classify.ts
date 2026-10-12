@@ -431,7 +431,7 @@ export function resolveUnitKerja(
   };
 }
 
-const PREFIX_STATUS_PENGANGKATAN = /^(plt\.?|pjs\.?)\s+/i;
+const PREFIX_STATUS_PENGANGKATAN = /^(plt\.?|pjs\.?|pelaksana tugas|pejabat sementara)\s+/i;
 
 /**
  * Sebagian teks Jabatan Tambahan diawali singkatan status pengangkatan yang eksplisit ("Plt."
@@ -442,7 +442,8 @@ const PREFIX_STATUS_PENGANGKATAN = /^(plt\.?|pjs\.?)\s+/i;
 function ekstrakStatusPengangkatan(raw: string): { sisaTeks: string; status: "Plt" | "Pjs" | null } {
   const m = raw.match(PREFIX_STATUS_PENGANGKATAN);
   if (!m) return { sisaTeks: raw, status: null };
-  const status = m[1].toLowerCase().startsWith("plt") ? "Plt" : "Pjs";
+  const awalan = m[1].toLowerCase();
+  const status = awalan.startsWith("plt") || awalan.startsWith("pelaksana") ? "Plt" : "Pjs";
   return { sisaTeks: raw.slice(m[0].length), status };
 }
 
@@ -539,12 +540,12 @@ function cariUnitAtauProdiDenganPadaSuffix(sisa: string, master: MasterCache): U
  * PALING PANJANG (paling spesifik).
  */
 function cariUnitAtauProdi(sisa: string, master: MasterCache): UnitAtauProdi | undefined {
-  const sisaSetelahAlias = normalize(ALIAS_SINGKATAN_FAKULTAS[sisa] ?? ALIAS_NAMA_LENGKAP[sisa] ?? sisa);
+  const sisaSetelahAlias = samakanEjaan(normalize(ALIAS_SINGKATAN_FAKULTAS[sisa] ?? ALIAS_NAMA_LENGKAP[sisa] ?? sisa));
 
   type Kandidat = { kode: string; namaNorm: string; tipe: "unit" | "prodi" };
   const semua: Kandidat[] = [
-    ...master.unitAsal.map((u) => ({ kode: u.kode, namaNorm: normalize(u.nama), tipe: "unit" as const })),
-    ...master.programStudi.map((p) => ({ kode: p.kode, namaNorm: normalize(p.nama), tipe: "prodi" as const })),
+    ...master.unitAsal.map((u) => ({ kode: u.kode, namaNorm: samakanEjaan(normalize(u.nama)), tipe: "unit" as const })),
+    ...master.programStudi.map((p) => ({ kode: p.kode, namaNorm: samakanEjaan(normalize(p.nama)), tipe: "prodi" as const })),
   ];
   let terbaik: Kandidat | undefined;
   for (const k of semua) {
@@ -647,6 +648,40 @@ function cariProdiDenganKanonikJenjang(sisa: string, master: MasterCache): UnitA
 }
 
 /**
+ * Menyamakan variasi ejaan antara teks sumber dan nama master ke 1 bentuk. Diterapkan ke KEDUA
+ * sisi (teks sumber DAN nama unit/prodi master, lihat cariUnitAtauProdi) - kalau cuma ke teks
+ * sumber, nama master yang ejaannya beda jadi tidak ketemu: unit "Departemen Pendidikan IPA"
+ * (singkat) tapi prodi "S2 Pendidikan Ilmu Pengetahuan Alam" (lengkap) di master yang sama.
+ * Input sudah ternormalisasi (lowercase).
+ */
+function samakanEjaan(n: string): string {
+  return (
+    n
+      // Master SELALU pakai singkatan "UPT" (mis. "UPT Layanan Pengadaan") dan "Departemen
+      // Pendidikan IPA", tapi sumber data sering menulis lengkap "Unit Pelaksana Teknis"/"Pendidikan
+      // Ilmu Pengetahuan Alam". SENGAJA dibatasi ke frasa "Pendidikan Ilmu Pengetahuan Alam" saja
+      // (bukan "Ilmu Pengetahuan Alam" polos) - "Fakultas Matematika dan Ilmu Pengetahuan Alam"
+      // (nama resmi FMIPA) justru TETAP pakai ejaan lengkap di master, jadi tidak boleh ikut
+      // ke-alias (regresi yang sempat terjadi: Dekan/Wakil Dekan FMIPA jadi tidak ketemu master).
+      .replace(/\bunit pelaksana teknis\b/g, "upt")
+      .replace(/\bpendidikan ilmu pengetahuan alam\b/g, "pendidikan ipa")
+      // "PTIK" singkatan "Pusat Teknologi Informasi dan Komunikasi" (nama resmi Unit Asal-nya
+      // selalu "UPT Pusat Teknologi Informasi dan Komunikasi") - sumber sering pakai singkatan ini.
+      .replace(/\bptik\b/g, "pusat teknologi informasi dan komunikasi")
+      // Master tulis "Departemen Bimbingan Konseling" (tanpa "dan"), sumber sering tulis lengkap
+      // "Bimbingan dan Konseling" - disamakan di sini.
+      .replace(/\bbimbingan dan konseling\b/g, "bimbingan konseling")
+      // Prodi "Pendidikan Luar Sekolah" sudah direbrand nasional jadi "Pendidikan Non Formal" -
+      // nama Departemen-nya di UM tetap pakai nama lama, tapi nama Prodi di master sudah pakai
+      // nama baru (PRD-099), jadi disamakan di sini supaya tetap ketemu.
+      .replace(
+        /\bpendidikan luar sekolah program magister dan program doktor\b/g,
+        normalize(PRODI_PENDIDIKAN_NON_FORMAL)
+      )
+  );
+}
+
+/**
  * Raw "Jabatan Tambahan" menggabungkan nama role + unit/prodi dalam 1 sel TANPA pemisah yang
  * konsisten - kadang koma ("Kepala Sub Direktorat Layanan Pendidikan, Direktorat Pendidikan"),
  * kadang tanpa apa pun ("Dekan Fakultas Ilmu Sosial"). Jadi dicari lewat KANDIDAT AWALAN dari
@@ -676,19 +711,7 @@ export function pisahJabatanTambahanRaw(
   // Alam" saja (bukan "Ilmu Pengetahuan Alam" polos) - "Fakultas Matematika dan Ilmu Pengetahuan
   // Alam" (nama resmi FMIPA) justru TETAP pakai ejaan lengkap di master, jadi tidak boleh ikut
   // ke-alias (regresi yang sempat terjadi: Dekan/Wakil Dekan FMIPA jadi tidak ketemu master).
-  const rawNorm = normalize(sisaTeks)
-    .replace(/\bunit pelaksana teknis\b/g, "upt")
-    .replace(/\bpendidikan ilmu pengetahuan alam\b/g, "pendidikan ipa")
-    // "PTIK" singkatan "Pusat Teknologi Informasi dan Komunikasi" (nama resmi Unit Asal-nya
-    // selalu "UPT Pusat Teknologi Informasi dan Komunikasi") - sumber sering pakai singkatan ini.
-    .replace(/\bptik\b/g, "pusat teknologi informasi dan komunikasi")
-    // Master tulis "Departemen Bimbingan Konseling" (tanpa "dan"), sumber sering tulis lengkap
-    // "Bimbingan dan Konseling" - disamakan di sini.
-    .replace(/\bbimbingan dan konseling\b/g, "bimbingan konseling")
-    // Prodi "Pendidikan Luar Sekolah" sudah direbrand nasional jadi "Pendidikan Non Formal" -
-    // nama Departemen-nya di UM tetap pakai nama lama, tapi nama Prodi di master sudah pakai
-    // nama baru (PRD-099), jadi disamakan di sini supaya tetap ketemu.
-    .replace(/\bpendidikan luar sekolah program magister dan program doktor\b/g, normalize(PRODI_PENDIDIKAN_NON_FORMAL));
+  const rawNorm = samakanEjaan(normalize(sisaTeks));
 
   const kandidatRole = master.jabatanTambahanRole
     .filter((r) => {
